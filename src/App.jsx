@@ -1,7 +1,3 @@
-Family Planner App Code (src/App.jsx)
-
-Copy everything below this line and paste it into src/App.jsx on GitHub.
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Mic, MicOff, PenTool, Calendar as CalendarIcon, Settings, Home, 
