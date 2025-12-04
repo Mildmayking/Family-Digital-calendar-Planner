@@ -5,7 +5,7 @@ import {
   Users, UserPlus, ListChecks, Loader, Trash2, PlayCircle, Clock, Bell, User, Filter,
   Palette, Music, ChevronLeft, ChevronRight, X, Gift, GraduationCap, Briefcase, 
   Dumbbell, Utensils, Plane, Sun, MapPin, AlertCircle, Command, Save, Share2, Copy,
-  Speaker, Sliders
+  Speaker, Slider
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -30,7 +30,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = "notebook-2026-family-v10-sync-fix"; // Keeping the App ID stable for sync testing
+const appId = "notebook-2026-family-v10-sync-fix"; 
+const NETLIFY_URL = "https://family-digital-calendar-planner.netlify.app/"; // User's specified URL
 
 // --- SHARED DATA COLLECTIONS ---
 const COLLECTIONS = {
@@ -127,6 +128,20 @@ export default function App() {
   const audioRef = useRef(null);
 
   useEffect(() => { if (audioRef.current) audioRef.current.volume = 0.15; }, []);
+  
+  // Logic to parse the familyId from the URL on initial load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('familyId');
+    if (code && code.length === 6) {
+        // If a code is present in the URL, store it temporarily 
+        // to be used when the user reaches the setup screen.
+        localStorage.setItem('pendingFamilyCode', code);
+    } else {
+        localStorage.removeItem('pendingFamilyCode');
+    }
+  }, []);
+
 
   // 1. AUTH & FAMILY ID CHECK (Initial Load)
   useEffect(() => {
@@ -159,6 +174,7 @@ export default function App() {
         setMembers([]);
         return;
     }
+    // This query is key to data isolation: it filters all data by the familyId
     const membersQuery = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), where('familyId', '==', familyId));
     
     // Set up real-time listener for all family members
@@ -185,6 +201,7 @@ export default function App() {
   // 3. EVENTS LISTENER
   useEffect(() => {
     if (!familyId) return;
+    // This query is key to data isolation: it filters all data by the familyId
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.EVENTS), where('familyId', '==', familyId));
     return onSnapshot(q, snap => {
         const evs = snap.docs.map(d => ({id: d.id, ...d.data()}));
@@ -382,7 +399,16 @@ const FamilySetupScreen = ({ onSetup, signOut }) => {
     // and correctly asks if they want to start or join a family.
     
     const [mode, setMode] = useState(null); // 'create' or 'join'
-    const [code, setCode] = useState('');
+    const [code, setCode] = useState(() => localStorage.getItem('pendingFamilyCode') || '');
+
+    useEffect(() => {
+        // If code was present in URL, automatically try to join
+        if (code && mode === null) {
+            setMode('join');
+            localStorage.removeItem('pendingFamilyCode'); // Clear it after use
+        }
+    }, [code, mode]);
+
 
     return (
         <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
@@ -799,55 +825,37 @@ const SettingsScreen = ({ member, members, familyId, db, appId, theme, onUpdate,
         setNewName('');
     };
     
-    // --- UPDATED SHARING LOGIC: Ensure link starts with protocol for clickability ---
+    // --- UPDATED SHARING LOGIC: Use provided Netlify URL and clean copy message ---
     const copyCode = () => {
-        // Ensure the link is prefixed with https:// so messaging apps recognize it as clickable
-        let appLink = window.location.href;
-        if (!appLink.startsWith('https://') && !appLink.startsWith('http://')) {
-            appLink = `https://${appLink}`;
-        }
+        
+        // Use the explicit Netlify URL provided by the user
+        const appLink = NETLIFY_URL; 
+        
+        // Add the familyId parameter to create the smart link
+        const smartLink = `${appLink}?familyId=${familyId}`;
 
-        const shareMessage = `Join our Family Calendar!
+        const shareMessage = `Join our Family Hub Calendar! Click the link below to automatically enter our shared space:
     
-Family Code: ${familyId}
-App Link: ${appLink}
+🔗 ${smartLink}
     
-Sign in as Guest or create an account, then enter the code to sync our schedules.`;
+(Family Code: ${familyId})`; // Provide code as fallback only
         
         const setCopiedState = () => {
              setCopied(true);
              setTimeout(()=>setCopied(false), 3000);
         };
 
-        // Attempt to use Web Share API first (better mobile UX)
-        if (navigator.share) {
-            navigator.share({
-                title: 'Join Family Hub Calendar',
-                text: shareMessage,
-                url: appLink,
-            }).then(() => {
-                 setCopiedState(); // Use state update on success
-            }).catch((error) => {
-                // If sharing fails/is cancelled (e.g., on desktop), fall back to clipboard copy
-                if (error.name !== 'AbortError') {
-                   document.execCommand('copy'); // Fallback copy for compatibility
-                   navigator.clipboard.writeText(shareMessage).then(setCopiedState); 
-                }
-            });
-        } else {
-            // Fallback for desktop/unsupported browsers: copy message
-            navigator.clipboard.writeText(shareMessage).then(setCopiedState).catch(() => {
-                // If clipboard fails (e.g., in iframe/some secure contexts)
-                // console.error("Clipboard write failed, using execCommand fallback");
-                const textarea = document.createElement('textarea');
-                textarea.value = shareMessage;
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
-                setCopiedState();
-            });
-        }
+        // Fallback for clipboard copy (most reliable across desktop/iframe)
+        navigator.clipboard.writeText(shareMessage).then(setCopiedState).catch(() => {
+            // Fallback for browsers/contexts that deny direct clipboard access
+            const textarea = document.createElement('textarea');
+            textarea.value = shareMessage;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            setCopiedState();
+        });
     };
     // --- END UPDATED SHARING LOGIC ---
 
@@ -858,7 +866,7 @@ Sign in as Guest or create an account, then enter the code to sync our schedules
             {/* FAMILY CODE SHARING */}
             <section className={`${theme.card} p-6 rounded-[2rem] border overflow-hidden`}>
                 <h3 className="font-bold mb-4 flex items-center gap-2"><Share2 size={18} className="text-green-500"/> Share Family</h3>
-                <p className="text-xs opacity-60 mb-3">Tap to share the sync link and code with a family member.</p>
+                <p className="text-xs opacity-60 mb-3">Tap to share the automatic join link and code with a family member.</p>
                 <button onClick={copyCode} className="w-full bg-black/5 p-4 rounded-xl flex items-center justify-between group hover:bg-black/10 transition active:scale-95">
                     <div className="flex flex-col items-start overflow-hidden">
                         <span className="text-[10px] uppercase font-bold text-gray-400">Family ID</span>
