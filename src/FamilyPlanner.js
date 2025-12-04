@@ -1,8 +1,8 @@
 // Note: This is standard JavaScript (ES6) ready for deployment.
-// It assumes you have React, ReactDOM, Firebase SDKs, and Lucide Icons available in your build environment.
-// For testing in a simple HTML environment, a separate index.html file that loads these dependencies is required.
+// It relies on global functions exposed by the index.html wrapper file (F_*)
 
 const { useState, useEffect, useRef } = React;
+const lucide = window.lucide; // Ensure lucide is accessed from the global window object
 
 // --- FIREBASE CONFIGURATION (Managed Service Model) ---
 // These are the unique keys for your new project: family-digital-calendar-hub
@@ -31,7 +31,7 @@ const COLLECTIONS = {
 // Initialize Firebase instances (called only once)
 function initFirebase() {
     if (!appInstance) {
-        // Use global window accessors for Firebase setup
+        // Use global window accessors for Firebase setup (F_ prefix defined in index.html)
         appInstance = window.F_initializeApp(firebaseConfig);
         authInstance = window.F_getAuth(appInstance);
         dbInstance = window.F_getFirestore(appInstance);
@@ -293,7 +293,7 @@ function App() {
 
   const toggleMusic = () => { if (audioRef.current) { isPlayingMusic?audioRef.current.pause():audioRef.current.play(); setIsPlayingMusic(!isPlayingMusic); }};
 
-  if (loading || !firebaseRefs) return <div className="h-screen flex items-center justify-center"><Loader className="animate-spin text-blue-500"/></div>;
+  if (loading || !firebaseRefs) return <div className="h-screen flex items-center justify-center"><lucide.Loader className="animate-spin text-blue-500"/></div>;
   
   if (!user || view === 'auth') return <AuthScreen onAuth={handleAuth} onGuestLogin={handleGuestLogin} />;
 
@@ -311,7 +311,7 @@ function App() {
             <div className={`h-10 w-10 rounded-full flex items-center justify-center text-xl shadow-md border-2 border-white/40 ${theme.accent} text-white`}>{currentMember.avatar}</div>
             <div><h1 className="text-base font-bold leading-tight">{currentMember.name}</h1></div>
         </div>
-        <button onClick={toggleMusic} className={`p-2 rounded-full ${theme.card} border border-black/5`}>{isPlayingMusic ? <Volume2 size={20} className={theme.accent.replace('bg-', 'text-')} /> : <VolumeX size={20} className="opacity-40" />}</button>
+        <button onClick={toggleMusic} className={`p-2 rounded-full ${theme.card} border border-black/5`}>{isPlayingMusic ? <lucide.Volume2 size={20} className={theme.accent.replace('bg-', 'text-')} /> : <lucide.VolumeX size={20} className="opacity-40" />}</button>
       </header>
       <main className="p-4 pb-32 max-w-xl mx-auto w-full min-h-[85vh]">
         {view === 'home' && <Dashboard member={currentMember} events={events} theme={theme} setView={setView} />}
@@ -367,13 +367,13 @@ const AuthScreen = ({ onAuth, onGuestLogin }) => {
                 
                 {/* INSTRUCTION */}
                 <p className="text-xs text-white/50 pt-4 text-center flex items-center justify-center gap-1">
-                    <Users size={12}/>
+                    <lucide.Users size={12}/>
                     Need a shared calendar? Log in above or continue as guest to set up your family.
                 </p>
 
                 {/* GUEST BUTTON - The path the user preferred */}
                 <button onClick={onGuestLogin} className="w-full p-4 bg-white/20 text-white rounded-xl font-bold shadow-md hover:bg-white/30 transition flex items-center justify-center gap-2 border border-white/10">
-                    <LogOut size={20}/>
+                    <lucide.LogOut size={20}/>
                     Continue as Guest
                 </button>
             </div>
@@ -403,11 +403,11 @@ const FamilySetupScreen = ({ onSetup, signOut }) => {
                 {!mode ? (
                     <div className="space-y-4">
                         <button onClick={()=>onSetup('create')} className="w-full p-6 bg-indigo-600 rounded-2xl font-bold text-lg hover:bg-indigo-500 transition shadow-lg flex flex-col items-center gap-2">
-                            <Home size={32}/>
+                            <lucide.Home size={32}/>
                             Start New Family
                         </button>
                         <button onClick={()=>setMode('join')} className="w-full p-6 bg-white/10 rounded-2xl font-bold text-lg hover:bg-white/20 transition border border-white/5 flex flex-col items-center gap-2">
-                            <Users size={32}/>
+                            <lucide.Users size={32}/>
                             Join Existing Family
                         </button>
                     </div>
@@ -419,7 +419,7 @@ const FamilySetupScreen = ({ onSetup, signOut }) => {
                         <button onClick={()=>setMode(null)} className="mt-4 text-sm opacity-60">Back</button>
                     </div>
                 )}
-                <button onClick={signOut} className="mt-12 text-sm opacity-40 hover:opacity-100 flex items-center justify-center gap-2 w-full"><LogOut size={16}/> Sign Out</button>
+                <button onClick={signOut} className="mt-12 w-full py-4 text-white/40 hover:opacity-100 flex items-center justify-center gap-2"><lucide.LogOut size={16}/> Sign Out</button>
             </div>
         </div>
     );
@@ -447,9 +447,9 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
                             <span className="font-bold text-lg">{m.name}</span>
                         </button>
                     ))}
-                    {members.length < 6 && <button onClick={()=>setAdd(true)} className="flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/40 transition"><UserPlus size={40}/><span className="font-bold">Add</span></button>}
+                    {members.length < 6 && <button onClick={()=>setAdd(true)} className="flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/40 transition"><lucide.UserPlus size={40}/><span className="font-bold">Add</span></button>}
                 </div>
-                <button onClick={signOut} className="mt-12 w-full py-4 text-white/40 hover:text-white flex justify-center gap-2"><LogOut size={18}/> Sign Out</button>
+                <button onClick={signOut} className="mt-12 w-full py-4 text-white/40 hover:text-white flex justify-center gap-2"><lucide.LogOut size={18}/> Sign Out</button>
             </div>
             {add && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50">
@@ -487,7 +487,7 @@ const Dashboard = ({ member, events, theme, setView }) => {
     return (
         <div className="space-y-6 animate-fade-in-up">
             <div className={`p-6 md:p-8 rounded-[2rem] ${theme.accent} text-white shadow-xl relative overflow-hidden group`}>
-                <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform duration-700"><Heart size={150} fill="currentColor" /></div>
+                <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform duration-700"><lucide.Heart size={150} fill="currentColor" /></div>
                 <div className="relative z-10">
                     <p className="opacity-90 text-xs font-bold uppercase tracking-widest mb-1">{dateStr}</p>
                     <h2 className="text-2xl md:text-4xl font-bold">Hi, {member.name}!</h2>
@@ -667,4 +667,301 @@ const FamilyCalendar = ({ member, members, events, familyId, db, appId, theme })
                              </div>
                             <div className="flex gap-2">
                                 <input type="time" className="flex-1 p-3 rounded-xl border outline-none text-sm font-medium bg-white text-black border-gray-200" value={newEventTime} onChange={e=>setNewEventTime(e.target.value)} />
-                                <div className="flex bg-gray-100 rounded-xl p-1 gap-1 overflow-x-auto max-w-[150px]">{EVENT_ICONS.slice(1).map(ic => {const Icon = ic.icon; return(<button key={ic.id} onClick={() => setNewEventIcon(newEventIcon === ic.id ? 'default' : ic.id)} className={`p-2 rounded-lg transition-all flex-shrink-0 ${newEventIcon === ic.id ? 'bg-white shadow text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`} title={ic.label}><Icon size={18} /></button>)}
+                                <div className="flex bg-gray-100 rounded-xl p-1 gap-1 overflow-x-auto max-w-[150px]">{EVENT_ICONS.slice(1).map(ic => {const Icon = ic.icon; return(<button key={ic.id} onClick={() => setNewEventIcon(newEventIcon === ic.id ? 'default' : ic.id)} className={`p-2 rounded-lg transition-all flex-shrink-0 ${newEventIcon === ic.id ? 'bg-white shadow text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`} title={ic.label}><Icon size={18} /></button>)})}</div>
+                            </div>
+                            <button onClick={handleAddEvent} className={`w-full py-3 rounded-xl ${theme.accent} text-white font-bold shadow-lg flex items-center justify-center gap-2`}><lucide.Save size={18}/> Save Event</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const NotesManager = ({ member, familyId, db, appId, theme }) => {
+    const [notes, setNotes] = useState([]);
+    const [isEditor, setIsEditor] = useState(false);
+    const [title, setTitle] = useState('');
+    const [content, setContent] = useState('');
+    const [isListening, setIsListening] = useState(false);
+    const recognition = useRef(null);
+
+    useEffect(() => {
+        if(!familyId) return;
+        const q = window.F_query(window.F_collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.NOTES), window.F_where('familyId', '==', familyId), window.F_where('authorId', '==', member.id));
+        return window.F_onSnapshot(q, s => setNotes(s.docs.map(d=>({id:d.id, ...d.data()}))));
+    }, [familyId, member.id]);
+
+    useEffect(() => {
+        if (window.webkitSpeechRecognition || window.SpeechRecognition) {
+            const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
+            recognition.current = new SR();
+            recognition.current.continuous = true;
+            recognition.current.onresult = e => {
+                let final = '';
+                for (let i = e.resultIndex; i < e.results.length; ++i) if(e.results[i].isFinal) final += e.results[i][0].transcript;
+                if(final) setContent(p => p + ' ' + final);
+            };
+        }
+    }, []);
+
+    const toggleMic = () => {
+        if (isListening) { recognition.current.stop(); setIsListening(false); }
+        else { recognition.current.start(); setIsListening(true); }
+    };
+
+    const save = async () => {
+        if(!title && !content) return;
+        await window.F_addDoc(window.F_collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.NOTES), {
+            familyId, // Shared ID
+            title: title || 'Untitled', content, authorId: member.id, createdAt: Date.now()
+        });
+        setIsEditor(false); setTitle(''); setContent('');
+    };
+
+    if (isEditor) return (
+        <div className={`h-[75vh] flex flex-col ${theme.card} rounded-[2rem] shadow-2xl border border-white/20 overflow-hidden relative`}>
+            <div className="p-4 flex justify-between items-center border-b border-gray-100 bg-white/50 backdrop-blur-sm">
+                <button onClick={()=>setIsEditor(false)} className={`${theme.subtext} font-medium`}>Cancel</button>
+                <button onClick={save} className={`${theme.accent} text-white px-6 py-2 rounded-xl font-bold shadow-md`}>Save</button>
+            </div>
+            <div className="p-6 flex-1 relative flex flex-col">
+                <input className={`text-2xl font-bold bg-transparent outline-none w-full mb-4 ${theme.text}`} placeholder="Title..." value={title} onChange={e=>setTitle(e.target.value)}/>
+                <textarea className={`w-full flex-1 bg-transparent outline-none resize-none ${theme.text} opacity-80`} placeholder="Type or speak..." value={content} onChange={e=>setContent(e.target.value)}/>
+                <button onClick={toggleMic} className={`absolute bottom-6 right-6 p-4 rounded-full shadow-xl transition hover:scale-110 active:scale-90 ${isListening ? 'bg-red-500 animate-pulse text-white' : `${theme.accent} text-white`}`}>
+                    {isListening ? <lucide.MicOff/> : <lucide.Mic/>}
+                </button>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="space-y-4">
+            <div className="flex justify-between items-center mb-2">
+                <h2 className="text-2xl font-bold px-2">My Notes</h2>
+                <button onClick={()=>setIsEditor(true)} className={`${theme.accent} text-white p-3 rounded-xl shadow-md hover:brightness-110 transition active:scale-95`}><lucide.PenTool size={20}/></button>
+            </div>
+            <div className="grid gap-3">
+                {notes.map(n => (
+                    <div key={n.id} className={`${theme.card} p-5 rounded-2xl border shadow-sm relative group`}>
+                        <h3 className="font-bold mb-1">{n.title}</h3>
+                        <p className="text-sm opacity-70 line-clamp-3">{n.content}</p>
+                        <button onClick={(e)=>{e.stopPropagation(); window.F_deleteDoc(window.F_doc(db,'artifacts',appId,'public','data',COLLECTIONS.NOTES,n.id))}} className="absolute top-2 right-2 p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><lucide.Trash2 size={16}/></button>
+                    </div>
+                ))}
+                {notes.length === 0 && <div className="text-center py-12 opacity-40">No notes yet. Use voice to add one!</div>}
+            </div>
+        </div>
+    );
+};
+
+const SettingsScreen = ({ member, members, familyId, db, appId, theme, onUpdate, onCreate }) => {
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [newName, setNewName] = useState('');
+    const [newRole, setNewRole] = useState('child');
+    const [newGender, setNewGender] = useState('female');
+    const [copied, setCopied] = useState(false);
+
+    // --- RESTORED SETTINGS STATE ---
+    const [contentPref, setContentPref] = useState(member?.contentPref || 'inspiration');
+    const [voiceGender, setVoiceGender] = useState(member?.voiceSettings?.gender || 'female');
+    const [voiceSpeed, setVoiceSpeed] = useState(member?.voiceSettings?.rate || 1);
+    const [voicePitch, setVoicePitch] = useState(member?.voiceSettings?.pitch || 1);
+
+    const updatePref = async (field, value) => {
+        const newData = { ...member, [field]: value };
+        onUpdate(newData); 
+        await window.F_setDoc(window.F_doc(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS, member.id), newData, { merge: true });
+    };
+
+    // Instant update for toggle buttons
+    const updateContentPref = async (newPref) => {
+        setContentPref(newPref);
+        const newData = { ...member, contentPref: newPref };
+        onUpdate(newData);
+        await window.F_setDoc(window.F_doc(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS, member.id), newData, { merge: true });
+    };
+
+    // Instant update for voice gender
+    const updateVoiceGender = async (newGender) => {
+        setVoiceGender(newGender);
+        const newVoice = { ...member.voiceSettings, gender: newGender };
+        const newData = { ...member, voiceSettings: newVoice };
+        onUpdate(newData);
+        await window.F_setDoc(window.F_doc(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS, member.id), newData, { merge: true });
+    };
+
+    // Manual save for sliders (to avoid too many writes)
+    const updateVoiceSliders = async () => {
+        const newVoice = { gender: voiceGender, rate: voiceSpeed, pitch: voicePitch };
+        const newData = { ...member, voiceSettings: newVoice };
+        onUpdate(newData);
+        await window.F_setDoc(window.F_doc(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS, member.id), newData, { merge: true });
+        speakText("Voice settings updated.", newVoice);
+    };
+
+    const handleAddMember = () => {
+        if (!newName) return;
+        let avatar = '👤';
+        if (newRole === 'parent') avatar = newGender === 'male' ? '👨' : '👩';
+        else avatar = newGender === 'male' ? '👦' : '👧';
+        
+        onCreate(newName, newRole, newGender, 'ocean', avatar); 
+        setShowAddModal(false);
+        setNewName('');
+    };
+    
+    // --- SHARING LOGIC ---
+    const copyCode = () => {
+        
+        const appLink = NETLIFY_URL; 
+        const smartLink = `${appLink}?familyId=${familyId}`;
+
+        const shareMessage = `Join our Family Hub Calendar!
+
+App Link (Click to Join): ${smartLink}
+Family Code (Manual Fallback): ${familyId}`;
+        
+        const setCopiedState = () => {
+             setCopied(true);
+             setTimeout(()=>setCopied(false), 3000);
+        };
+
+        // Fallback for clipboard copy (most reliable across desktop/iframe)
+        navigator.clipboard.writeText(shareMessage).then(setCopiedState).catch(() => {
+            const textarea = document.createElement('textarea');
+            textarea.value = shareMessage;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            setCopiedState();
+        });
+    };
+    // --- END SHARING LOGIC ---
+
+    return (
+        <div className="space-y-6 pb-20">
+            <h2 className="text-2xl font-bold px-2">Settings</h2>
+            
+            {/* FAMILY CODE SHARING */}
+            <section className={`${theme.card} p-6 rounded-[2rem] border overflow-hidden`}>
+                <h3 className="font-bold mb-4 flex items-center gap-2"><lucide.Share2 size={18} className="text-green-500"/> Share Family</h3>
+                <p className="text-xs opacity-60 mb-3">Tap to share the automatic join link and code with a family member.</p>
+                <button onClick={copyCode} className="w-full bg-black/5 p-4 rounded-xl flex items-center justify-between group hover:bg-black/10 transition active:scale-95">
+                    <div className="flex flex-col items-start overflow-hidden">
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Family ID</span>
+                        <code className="font-mono font-bold text-xl tracking-widest text-gray-800">{familyId}</code>
+                    </div>
+                    {copied ? <div className="flex items-center gap-1 text-green-600 font-bold text-xs"><lucide.Check size={18}/> Copied!</div> : <lucide.Copy size={18} className="opacity-40 group-hover:opacity-100"/>}
+                </button>
+            </section>
+
+             {/* PREFERENCES RESTORED */}
+             <section className={`${theme.card} p-6 rounded-[2rem] border`}>
+                <h3 className="font-bold mb-4 flex items-center gap-2"><lucide.Sliders size={18} className="text-blue-500"/> My Preferences</h3>
+                
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold opacity-50 mb-2 block">DAILY CONTENT</label>
+                        <div className="flex bg-black/5 p-1 rounded-xl">
+                            <button onClick={()=>updateContentPref('inspiration')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${contentPref==='inspiration' ? 'bg-white shadow text-black' : 'opacity-50'}`}>Quotes</button>
+                            <button onClick={()=>updateContentPref('bible')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${contentPref==='bible' ? 'bg-white shadow text-black' : 'opacity-50'}`}>Bible Verses</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold opacity-50 mb-2 block flex justify-between"><span>VOICE ASSISTANT</span> <lucide.Speaker size={12}/></label>
+                         <div className="flex bg-black/5 p-1 rounded-xl mb-2">
+                            <button onClick={()=>updateVoiceGender('female')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${voiceGender==='female' ? 'bg-white shadow text-pink-600' : 'opacity-50'}`}>Female</button>
+                            <button onClick={()=>updateVoiceGender('male')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${voiceGender==='male' ? 'bg-white shadow text-blue-600' : 'opacity-50'}`}>Male</button>
+                        </div>
+                        <div className="flex gap-2">
+                             <div className="flex-1">
+                                <label className="text-[10px] font-bold opacity-40">Speed</label>
+                                <input type="range" min="0.5" max="2" step="0.1" value={voiceSpeed} onChange={e=>setVoiceSpeed(parseFloat(e.target.value))} className="w-full accent-indigo-600"/>
+                             </div>
+                             <div className="flex-1">
+                                <label className="text-[10px] font-bold opacity-40">Pitch</label>
+                                <input type="range" min="0.5" max="2" step="0.1" value={voicePitch} onChange={e=>setVoicePitch(parseFloat(e.target.value))} className="w-full accent-indigo-600"/>
+                             </div>
+                        </div>
+                        <button onClick={updateVoiceSliders} className="w-full py-2 bg-black/5 rounded-lg text-[10px] font-bold hover:bg-black/10 transition mt-2">Test & Save Voice Settings</button>
+                    </div>
+                </div>
+            </section>
+
+            {/* FAMILY MANAGEMENT */}
+            <section className={`${theme.card} p-6 rounded-[2rem] border`}>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold flex items-center gap-2"><lucide.Users size={18} className="text-indigo-500"/> Family Members</h3>
+                    <span className="text-xs font-bold opacity-50 bg-black/5 px-2 py-1 rounded-full">{members.length} / 6</span>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                    {members.map(m => (
+                        <div key={m.id} className="flex flex-col items-center gap-2">
+                             <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl border border-black/10 shadow-sm">
+                                {m.avatar}
+                             </div>
+                             <span className={`text-[10px] font-bold opacity-70 truncate max-w-[60px] ${theme.subtext}`}>{m.name}</span>
+                        </div>
+                    ))}
+                    {members.length < 6 && (
+                        <button onClick={() => setShowAddModal(true)} className="flex flex-col items-center gap-2 opacity-60 hover:opacity-100 transition group">
+                             <div className="w-14 h-14 rounded-full border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 group-hover:border-indigo-500 group-hover:text-indigo-500">
+                                <lucide.UserPlus size={24} />
+                             </div>
+                             <span className="text-[10px] font-bold">Add New</span>
+                        </button>
+                    )}
+                </div>
+            </section>
+
+            {/* THEME SELECTION */}
+            <section className={`${theme.card} p-6 rounded-[2rem] border`}>
+                <h3 className="font-bold mb-4 flex items-center gap-2"><lucide.Palette size={18} className="text-pink-500"/> Theme</h3>
+                <div className="grid grid-cols-4 gap-2">
+                    {Object.entries(THEMES).map(([k, t]) => (
+                        <button key={k} onClick={()=>updatePref('theme', k)} className={`h-12 rounded-xl ${t.bg} border-2 relative overflow-hidden transition-all duration-300 ${member.theme===k ? 'border-indigo-500 ring-2 ring-indigo-500 ring-offset-2 scale-105 shadow-md' : 'border-black/5 hover:border-black/20'}`}>
+                             <div className={`absolute bottom-0 right-0 w-6 h-6 ${t.accent} opacity-20 rounded-tl-xl`}></div>
+                        </button>
+                    ))}
+                </div>
+            </section>
+
+             {showAddModal && (
+                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className={`w-full max-w-sm bg-white p-6 rounded-[2rem] shadow-2xl border`}>
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-black">New Member</h3>
+                            <button onClick={()=>setShowAddModal(false)} className="bg-gray-100 p-2 rounded-full hover:bg-gray-200"><X size={18}/></button>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 mb-1 block">NAME</label>
+                                <input className="w-full p-4 rounded-xl bg-gray-50 border border-gray-200 text-black focus:border-indigo-500 outline-none" placeholder="e.g. Liam" value={newName} onChange={e=>setNewName(e.target.value)}/>
+                            </div>
+                            <div className="flex gap-4">
+                                <div className="flex-1">
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">ROLE</label>
+                                    <div className="flex bg-gray-100 p-1 rounded-xl">
+                                        <button onClick={()=>setNewRole('parent')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newRole==='parent'?'bg-indigo-600 text-white':'text-gray-400'}`}>Parent</button>
+                                        <button onClick={()=>setNewRole('child')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newRole==='child'?'bg-indigo-600 text-white':'text-gray-400'}`}>Child</button>
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">GENDER</label>
+                                    <div className="flex bg-gray-100 p-1 rounded-xl">
+                                        <button onClick={()=>setNewGender('male')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newGender==='male'?'bg-blue-600 text-white':'text-gray-400'}`}>Boy</button>
+                                        <button onClick={()=>setNewGender('female')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newGender==='female'?'bg-pink-600 text-white':'text-gray-400'}`}>Girl</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={handleAddMember} className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl mt-4 hover:scale-[1.02] transition shadow-lg shadow-indigo-200">Create Profile</button>
+                        </div>
+                    </div>
+                 </div>
+            )}
+        </div>
+    );
+};
