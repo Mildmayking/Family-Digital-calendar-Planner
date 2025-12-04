@@ -30,7 +30,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = "notebook-2026-family-v9-fixes"; 
+const appId = "notebook-2026-family-v10-sync-fix"; // Updated App ID
 
 // --- SHARED DATA COLLECTIONS ---
 const COLLECTIONS = {
@@ -112,36 +112,6 @@ const speakText = (text, voiceSettings) => {
   window.speechSynthesis.speak(u);
 };
 
-const parseVoiceCommandToDate = (text) => {
-    const now = new Date();
-    const cleanText = text.toLowerCase();
-    
-    if (cleanText.includes('tomorrow')) {
-        const d = new Date(now); d.setDate(d.getDate() + 1); return d;
-    }
-    if (cleanText.includes('today')) return now;
-
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const dayMatch = days.find(d => cleanText.includes(`next ${d}`));
-    if (dayMatch) {
-        const d = new Date(now);
-        d.setDate(d.getDate() + (7 + days.indexOf(dayMatch) - d.getDay()) % 7 + 7);
-        return d;
-    }
-
-    const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec','january','february','march','april','may','june','july','august','september','october','november','december'];
-    const dateRegex = new RegExp(`(${months.join('|')})\\s+(\\d{1,2})(st|nd|rd|th)?`, 'i');
-    const match = cleanText.match(dateRegex);
-    if (match) {
-        const monthIndex = months.findIndex(m => m.startsWith(match[1].substring(0,3).toLowerCase())) % 12;
-        const dayNum = parseInt(match[2]);
-        let year = now.getFullYear();
-        if (monthIndex < now.getMonth()) year++; 
-        return new Date(year, monthIndex, dayNum);
-    }
-    return null;
-};
-
 // --- APP COMPONENT ---
 export default function App() {
   const [user, setUser] = useState(null);
@@ -162,7 +132,7 @@ export default function App() {
 
   useEffect(() => { if (audioRef.current) audioRef.current.volume = 0.15; }, []);
 
-  // --- AUTH & FAMILY CHECK ---
+  // 1. AUTH & FAMILY ID CHECK (Initial Load)
   useEffect(() => {
     const initAuth = async () => { try { if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token); } catch (e) {} };
     initAuth();
@@ -170,16 +140,11 @@ export default function App() {
       if (u) {
         setUser(u); 
         const settingsSnap = await getDoc(doc(db, 'artifacts', appId, 'users', u.uid, 'settings', 'config'));
+        
         if (settingsSnap.exists() && settingsSnap.data().familyId) {
             setFamilyId(settingsSnap.data().familyId);
-            const membersQuery = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), where('familyId', '==', settingsSnap.data().familyId));
-            const snap = await getDocs(membersQuery);
-            if (!snap.empty) { 
-                setMembers(snap.docs.map(d=>({id:d.id,...d.data()}))); 
-                setView('profiles'); 
-            } else {
-                setView('setup_family'); 
-            }
+            // We rely on the dedicated useEffect for members/events sync now
+            setView('profiles'); 
         } else {
             setView('setup_family');
         }
@@ -192,7 +157,43 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // --- EVENTS LISTENER ---
+  // 2. REAL-TIME MEMBERS SYNC (CRITICAL FIX FOR SHARING)
+  useEffect(() => {
+    if (!familyId) {
+        setMembers([]);
+        return;
+    }
+    const membersQuery = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), where('familyId', '==', familyId));
+    
+    // Set up real-time listener for all family members
+    const unsub = onSnapshot(membersQuery, snap => {
+        const currentMembers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setMembers(currentMembers);
+        
+        // Update current member state with latest data (theme/pref updates)
+        if (currentMember) {
+             const updatedCurrent = currentMembers.find(m => m.id === currentMember.id);
+             if (updatedCurrent) {
+                 setCurrentMember(updatedCurrent);
+             } else {
+                 // Current profile was deleted - force user back to profiles screen
+                 setCurrentMember(null);
+                 setView('profiles');
+             }
+        }
+        
+        // If we are stuck at setup but members exist, move to profiles
+        if (currentMembers.length > 0 && (view === 'setup_family' || view === 'auth')) {
+             setView('profiles');
+        }
+    }, (error) => {
+        console.error("Failed to sync members:", error);
+    });
+
+    return () => unsub();
+  }, [familyId, view, currentMember ? currentMember.id : null]); // Depend on familyId and currentMember ID
+
+  // 3. EVENTS LISTENER
   useEffect(() => {
     if (!familyId) return;
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.EVENTS), where('familyId', '==', familyId));
@@ -202,7 +203,7 @@ export default function App() {
     });
   }, [familyId]);
 
-  // --- ALARM SYSTEM ---
+  // --- ALARM SYSTEM (Runs every 30s when app is active) ---
   useEffect(() => {
     if (!currentMember || events.length === 0) return;
 
@@ -258,21 +259,14 @@ export default function App() {
             createdBy: user.uid
         });
       }
-      
-      const membersQuery = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), where('familyId', '==', fid));
-      const snap = await getDocs(membersQuery);
-      setMembers(snap.docs.map(d=>({id:d.id, ...d.data()})));
-      setView('profiles');
   };
 
   const createMember = async (name, role, gender, theme, avatar) => {
       if (members.length >= 6) return; 
+      // Firestore listener handles the update of the 'members' state
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), { 
           familyId, name, role, gender, theme, avatar, contentPref: 'inspiration', voiceSettings: { gender, rate: 1, pitch: 1 } 
       });
-      const membersQuery = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), where('familyId', '==', familyId));
-      const snap = await getDocs(membersQuery);
-      setMembers(snap.docs.map(d=>({id:d.id, ...d.data()})));
   };
 
   const toggleMusic = () => { if (audioRef.current) { isPlayingMusic?audioRef.current.pause():audioRef.current.play(); setIsPlayingMusic(!isPlayingMusic); }};
@@ -285,10 +279,10 @@ export default function App() {
 
   if (view === 'profiles') return <ProfileSelector members={members} onSelect={m=>{setCurrentMember(m); setView('home');}} onCreate={createMember} signOut={()=>signOut(auth)}/>;
 
-  const theme = THEMES[currentMember.theme || 'ocean'];
+  const theme = THEMES[currentMember?.theme || 'ocean'];
 
   return (
-    <div className={`min-h-screen transition-colors duration-500 ${theme.bg} ${theme.text}`} style={{fontFamily: currentMember.role==='child'?'"Comic Neue",cursive':'"Inter",sans-serif'}}>
+    <div className={`min-h-screen transition-colors duration-500 ${theme.bg} ${theme.text}`} style={{fontFamily: currentMember?.role==='child'?'"Comic Neue",cursive':'"Inter",sans-serif'}}>
       <audio ref={audioRef} loop src="https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112762.mp3" />
       <header className={`px-4 py-3 sticky top-0 z-30 flex justify-between items-center backdrop-blur-xl bg-opacity-90 border-b border-black/5 ${theme.bg}`}>
         <div className="flex items-center gap-3" onClick={() => setView('profiles')}>
@@ -499,40 +493,10 @@ const FamilyCalendar = ({ member, members, events, familyId, db, appId, theme })
     const [newEventTitle, setNewEventTitle] = useState('');
     const [newEventIcon, setNewEventIcon] = useState('default');
     const [newEventTime, setNewEventTime] = useState('12:00');
-    const [isHandsFree, setIsHandsFree] = useState(false);
-    const [isListening, setIsListening] = useState(false);
     const [isMicActive, setIsMicActive] = useState(false); 
-    const recognition = useRef(null);
 
     // --- VOICE LOGIC ---
-    const stateRef = useRef({ newEventTitle, selectedDate, showModal });
-    useEffect(() => {
-        stateRef.current = { newEventTitle, selectedDate, showModal };
-    }, [newEventTitle, selectedDate, showModal]);
-
-    const handleSaveFromVoice = async () => {
-        const { newEventTitle, selectedDate } = stateRef.current;
-        if (!newEventTitle || !selectedDate) return; 
-        
-        const titleToSave = newEventTitle || "Voice Event";
-        const [hours, mins] = newEventTime.split(':');
-        const eventDateTime = new Date(selectedDate);
-        eventDateTime.setHours(parseInt(hours), parseInt(mins), 0, 0);
-
-        const assignedMember = members.find(m => m.id === selectedAssignee);
-        const memberName = selectedAssignee === 'all' ? 'Everyone' : (assignedMember ? assignedMember.name : 'Unknown');
-
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.EVENTS), {
-            familyId, title: titleToSave, startTime: eventDateTime.getTime(), memberId: selectedAssignee, memberName, icon: newEventIcon, createdAt: Date.now()
-        });
-        setNewEventTitle('');
-    };
-
-    // Specific dictation for the input field (Mic Button)
     const startDictation = () => {
-        if (isHandsFree) setIsHandsFree(false); 
-        if (recognition.current) recognition.current.stop();
-
         const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
         if (!SR) return;
         
@@ -548,51 +512,6 @@ const FamilyCalendar = ({ member, members, events, familyId, db, appId, theme })
             setNewEventTitle(text);
         };
         dictation.start();
-    };
-
-    // Global Hands-free logic
-    useEffect(() => {
-        if (window.webkitSpeechRecognition || window.SpeechRecognition) {
-            const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
-            recognition.current = new SR();
-            recognition.current.continuous = false;
-            recognition.current.lang = 'en-US';
-            recognition.current.onstart = () => setIsListening(true);
-            recognition.current.onresult = (e) => {
-                const text = e.results[0][0].transcript;
-                const lower = text.toLowerCase();
-                if (lower.includes('save') || lower.includes('add event')) { 
-                    handleSaveFromVoice(); 
-                } else { 
-                    const parsed = parseVoiceCommandToDate(text);
-                    if(parsed) {
-                        setSelectedDate(parsed);
-                        setShowModal(true);
-                        setNewEventTitle(''); 
-                    } else {
-                        // Only update title if modal is open to avoid ghosts
-                        if (stateRef.current.showModal) setNewEventTitle(text); 
-                    }
-                }
-            };
-            recognition.current.onend = () => {
-                setIsListening(false);
-                if (isHandsFree) {
-                    try { recognition.current.start(); } catch(e){}
-                } 
-            };
-            recognition.current.onerror = (e) => {
-                setIsListening(false);
-                if (isHandsFree && e.error !== 'not-allowed' && e.error !== 'aborted') {
-                    setTimeout(() => { try { recognition.current.start(); } catch(e){} }, 1000); 
-                }
-            };
-        }
-    }, [isHandsFree]); 
-
-    const toggleHandsFree = () => {
-        if (isHandsFree) { setIsHandsFree(false); try{recognition.current?.stop();}catch(e){} } 
-        else { setIsHandsFree(true); try{recognition.current?.start();}catch(e){} }
     };
 
     const changeMonth = (offset) => {
@@ -635,9 +554,6 @@ const FamilyCalendar = ({ member, members, events, familyId, db, appId, theme })
             <div className="flex justify-between items-center mb-2">
                 <div><h2 className="text-2xl font-bold leading-none">{currentDate.toLocaleString('default', { month: 'long' })}</h2><p className={`text-sm ${theme.subtext}`}>{currentDate.getFullYear()}</p></div>
                 <div className="flex gap-2 items-center">
-                     <button onClick={toggleHandsFree} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${isHandsFree ? 'bg-red-500 text-white border-red-600 animate-pulse' : 'bg-white text-indigo-600 border-indigo-200'}`}>
-                        {isHandsFree ? <Mic size={14} /> : <MicOff size={14} />} {isHandsFree ? "Hot Mic" : "Hands Free"}
-                    </button>
                     <button onClick={() => changeMonth(-1)} className={`p-2 rounded-xl ${theme.card} border hover:bg-black/5`}><ChevronLeft size={20}/></button>
                     <button onClick={() => changeMonth(1)} className={`p-2 rounded-xl ${theme.card} border hover:bg-black/5`}><ChevronRight size={20}/></button>
                 </div>
