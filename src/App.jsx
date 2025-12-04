@@ -242,6 +242,7 @@ export default function App() {
   
   const handleGuestLogin = async () => {
       try {
+          // This sign-in will trigger the main onAuthStateChanged useEffect, which then redirects to setup_family
           await signInAnonymously(auth);
       } catch (e) {
           console.error("Guest login failed:", e);
@@ -270,6 +271,9 @@ export default function App() {
             createdBy: user.uid
         });
       }
+      
+      // *** FIX: Explicitly transition to profiles after setup is complete ***
+      setView('profiles');
   };
 
   const createMember = async (name, role, gender, theme, avatar) => {
@@ -284,9 +288,10 @@ export default function App() {
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader className="animate-spin text-blue-500"/></div>;
   
-  if (!user || view === 'auth') return <AuthScreen onAuth={handleAuth} onFamilySetup={handleFamilySetup} onGuestLogin={handleGuestLogin} setUser={setUser} setFamilyId={setFamilyId} setView={setView} />;
+  // Revert AuthScreen to V8 style (Email/Password/Guest -> then redirect to setup_family)
+  if (!user || view === 'auth') return <AuthScreen onAuth={handleAuth} onGuestLogin={handleGuestLogin} />;
 
-  // The setup_family screen is only shown if the user is authenticated but lacks a familyId
+  // The setup_family screen handles "Start New Family" or "Join Existing Family"
   if (view === 'setup_family') return <FamilySetupScreen onSetup={handleFamilySetup} signOut={()=>signOut(auth)} />;
 
   if (view === 'profiles') return <ProfileSelector members={members} onSelect={m=>{setCurrentMember(m); setView('home');}} onCreate={createMember} signOut={()=>signOut(auth)}/>;
@@ -323,13 +328,11 @@ export default function App() {
 }
 
 // --- AUTH & SETUP SCREENS ---
-const AuthScreen = ({ onAuth, onFamilySetup, onGuestLogin }) => {
+const AuthScreen = ({ onAuth, onGuestLogin }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [authError, setAuthError] = useState('');
     const [isLogin, setIsLogin] = useState(true);
-    const [showJoinModal, setShowJoinModal] = useState(false);
-    const [joinCode, setJoinCode] = useState('');
 
     const handleAuthSubmit = async (e) => {
         e.preventDefault();
@@ -341,33 +344,6 @@ const AuthScreen = ({ onAuth, onFamilySetup, onGuestLogin }) => {
         }
     };
     
-    // User chooses to start a new family
-    const handleStartNewFamily = async () => {
-        setAuthError('');
-        try {
-             // 1. Authenticate user anonymously first if needed, otherwise use existing auth
-             if (!auth.currentUser) await onGuestLogin();
-             // 2. Proceed to family creation using the authenticated user's ID
-             onFamilySetup('create');
-        } catch(e) {
-            setAuthError("Failed to start family. Please try logging in with an email first.");
-        }
-    };
-
-    const handleJoinFamily = async () => {
-        setAuthError('');
-        try {
-            // 1. Authenticate user anonymously first if needed
-            if (!auth.currentUser) await onGuestLogin();
-            // 2. Proceed to family join with code
-            onFamilySetup('join', joinCode);
-            setShowJoinModal(false);
-        } catch(e) {
-            setAuthError("Failed to join family. Check the code or try logging in with an email.");
-        }
-    };
-
-
     return (
         <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 flex flex-col items-center justify-center p-6 text-white">
             <div className="w-full max-w-md bg-white/10 backdrop-blur-2xl p-8 rounded-[2rem] border border-white/10 shadow-2xl">
@@ -384,50 +360,26 @@ const AuthScreen = ({ onAuth, onFamilySetup, onGuestLogin }) => {
                 {/* TOGGLE/ALTERNATIVE AUTH */}
                 <button onClick={()=>setIsLogin(!isLogin)} className="w-full text-xs opacity-60 hover:opacity-100 mb-6">{isLogin?"New? Create Account":"Login"}</button>
                 
-                <p className="text-sm font-bold text-white/70 text-center mb-4">OR JOIN A FAMILY</p>
+                {/* INSTRUCTION */}
+                <p className="text-xs text-white/50 pt-4 text-center flex items-center justify-center gap-1">
+                    <Users size={12}/>
+                    Need a shared calendar? Log in above or continue as guest to set up your family.
+                </p>
 
-                {/* SHARED FAMILY OPTIONS */}
-                <div className="space-y-4">
-                    <button onClick={handleStartNewFamily} className="w-full p-4 bg-yellow-500 text-indigo-900 rounded-xl font-bold shadow-md hover:bg-yellow-400 transition flex items-center justify-center gap-2">
-                        <Home size={20}/>
-                        Start New Family
-                    </button>
-                    <button onClick={() => setShowJoinModal(true)} className="w-full p-4 bg-white/20 text-white rounded-xl font-bold shadow-md hover:bg-white/30 transition flex items-center justify-center gap-2 border border-white/10">
-                        <Users size={20}/>
-                        Join Existing Family
-                    </button>
-                    <button onClick={onGuestLogin} className="w-full mt-4 py-3 text-xs opacity-40 hover:opacity-100">Continue as Guest (No Family)</button>
-                </div>
+                {/* GUEST BUTTON - The path the user preferred */}
+                <button onClick={onGuestLogin} className="w-full p-4 bg-white/20 text-white rounded-xl font-bold shadow-md hover:bg-white/30 transition flex items-center justify-center gap-2 border border-white/10">
+                    <LogOut size={20}/>
+                    Continue as Guest
+                </button>
             </div>
-            
-            {/* JOIN FAMILY MODAL */}
-            {showJoinModal && (
-                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50">
-                    <div className="bg-slate-800 p-8 rounded-3xl w-full max-w-sm">
-                        <h3 className="text-xl font-bold mb-6">Enter Family Code</h3>
-                        <input className="w-full p-4 bg-black/30 rounded-xl text-white text-center text-2xl tracking-widest font-mono mb-4 border border-white/20" 
-                            placeholder="6-DIGIT CODE" 
-                            value={joinCode} 
-                            onChange={e=>setJoinCode(e.target.value.toUpperCase())} 
-                            maxLength={6} />
-                        <button onClick={handleJoinFamily} disabled={joinCode.length < 6} className="w-full bg-white text-slate-900 py-4 rounded-xl font-bold disabled:opacity-50">Join</button>
-                        <button onClick={()=>setShowJoinModal(false)} className="w-full mt-4 text-white/50">Cancel</button>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
 
 
 const FamilySetupScreen = ({ onSetup, signOut }) => {
-    // This screen is now effectively the setup step for the user who just authenticated
-    // but doesn't have a Family ID set yet.
-    // However, since the AuthScreen now handles new family setup, this screen
-    // should theoretically only be reached if the user authenticated (via email or guest)
-    // and then manually chose "Join Existing Family" or something broke.
-    
-    // To ensure compatibility for users who previously had the old flow:
+    // This screen is reached ONLY after authentication (email/password or guest)
+    // and correctly asks if they want to start or join a family.
     
     const [mode, setMode] = useState(null); // 'create' or 'join'
     const [code, setCode] = useState('');
@@ -436,7 +388,7 @@ const FamilySetupScreen = ({ onSetup, signOut }) => {
         <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
             <div className="w-full max-w-md text-center">
                 <h1 className="text-3xl font-bold mb-2">Connect to Family</h1>
-                <p className="text-white/60 mb-8">You are logged in, but not connected to a shared calendar. Please choose an option.</p>
+                <p className="text-white/60 mb-8">You are logged in. Please choose whether to start a new shared calendar or join an existing one.</p>
                 {!mode ? (
                     <div className="space-y-4">
                         <button onClick={()=>onSetup('create')} className="w-full p-6 bg-indigo-600 rounded-2xl font-bold text-lg hover:bg-indigo-500 transition shadow-lg flex flex-col items-center gap-2">
@@ -847,11 +799,51 @@ const SettingsScreen = ({ member, members, familyId, db, appId, theme, onUpdate,
         setNewName('');
     };
     
+    // --- UPDATED SHARING LOGIC ---
     const copyCode = () => {
-        navigator.clipboard.writeText(familyId);
-        setCopied(true);
-        setTimeout(()=>setCopied(false), 2000);
+        const shareMessage = `Join our Family Calendar!
+    
+Family Code: ${familyId}
+App Link: ${window.location.href}
+    
+Sign in as Guest or create an account, then enter the code to sync our schedules.`;
+        
+        const setCopiedState = () => {
+             setCopied(true);
+             setTimeout(()=>setCopied(false), 3000);
+        };
+
+        // Attempt to use Web Share API first (better mobile UX)
+        if (navigator.share) {
+            navigator.share({
+                title: 'Join Family Hub Calendar',
+                text: shareMessage,
+                url: window.location.href,
+            }).then(() => {
+                 setCopiedState(); // Use state update on success
+            }).catch((error) => {
+                // If sharing fails/is cancelled (e.g., on desktop), fall back to clipboard copy
+                if (error.name !== 'AbortError') {
+                   document.execCommand('copy'); // Fallback copy for compatibility
+                   navigator.clipboard.writeText(shareMessage).then(setCopiedState); 
+                }
+            });
+        } else {
+            // Fallback for desktop/unsupported browsers: copy message
+            navigator.clipboard.writeText(shareMessage).then(setCopiedState).catch(() => {
+                // If clipboard fails (e.g., in iframe/some secure contexts)
+                // console.error("Clipboard write failed, using execCommand fallback");
+                const textarea = document.createElement('textarea');
+                textarea.value = shareMessage;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                setCopiedState();
+            });
+        }
     };
+    // --- END UPDATED SHARING LOGIC ---
 
     return (
         <div className="space-y-6 pb-20">
@@ -860,13 +852,13 @@ const SettingsScreen = ({ member, members, familyId, db, appId, theme, onUpdate,
             {/* FAMILY CODE SHARING */}
             <section className={`${theme.card} p-6 rounded-[2rem] border overflow-hidden`}>
                 <h3 className="font-bold mb-4 flex items-center gap-2"><Share2 size={18} className="text-green-500"/> Share Family</h3>
-                <p className="text-xs opacity-60 mb-3">Tap to copy the unique ID. Share this ONLY with family.</p>
+                <p className="text-xs opacity-60 mb-3">Tap to share the sync link and code with a family member.</p>
                 <button onClick={copyCode} className="w-full bg-black/5 p-4 rounded-xl flex items-center justify-between group hover:bg-black/10 transition active:scale-95">
                     <div className="flex flex-col items-start overflow-hidden">
                         <span className="text-[10px] uppercase font-bold text-gray-400">Family ID</span>
                         <code className="font-mono font-bold text-xl tracking-widest text-gray-800">{familyId}</code>
                     </div>
-                    {copied ? <div className="flex items-center gap-1 text-green-600 font-bold text-xs"><Check size={18}/> Copied</div> : <Copy size={18} className="opacity-40 group-hover:opacity-100"/>}
+                    {copied ? <div className="flex items-center gap-1 text-green-600 font-bold text-xs"><Check size={18}/> Copied!</div> : <Copy size={18} className="opacity-40 group-hover:opacity-100"/>}
                 </button>
             </section>
 
