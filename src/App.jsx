@@ -5,7 +5,7 @@ import {
   Users, UserPlus, ListChecks, Loader, Trash2, PlayCircle, Clock, Bell, User, Filter,
   Palette, Music, ChevronLeft, ChevronRight, X, Gift, GraduationCap, Briefcase, 
   Dumbbell, Utensils, Plane, Sun, MapPin, AlertCircle, Command, Save, Share2, Copy,
-  Speaker, Slider
+  Speaker, Sliders
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -30,7 +30,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = "notebook-2026-family-v10-sync-fix"; 
+const appId = "notebook-2026-family-v10-sync-fix"; // Keeping the App ID stable for sync testing
 const NETLIFY_URL = "https://family-digital-calendar-planner.netlify.app/"; // User's specified URL
 
 // --- SHARED DATA COLLECTIONS ---
@@ -470,7 +470,7 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50">
                     <div className="bg-slate-800 p-8 rounded-3xl w-full max-w-sm">
                         <h3 className="text-xl font-bold mb-6">New Profile</h3>
-                        <input className="w-full p-4 mb-4 bg-black/30 rounded-xl text-white" placeholder="Name" value={name} onChange={e=>setName(e.target.value)}/>
+                        <input className="w-full p-4 mb-4 bg-black/30 rounded-xl text-white" placeholder="Name" value={name} onChange={e=>setNewName(e.target.value)}/>
                         <div className="flex gap-2 mb-4"><button onClick={()=>setRole('parent')} className={`flex-1 p-3 rounded-lg font-bold ${role==='parent'?'bg-indigo-600':'bg-slate-700'}`}>Parent</button><button onClick={()=>setRole('child')} className={`flex-1 p-3 rounded-lg font-bold ${role==='child'?'bg-indigo-600':'bg-slate-700'}`}>Child</button></div>
                         <div className="flex gap-2 mb-6"><button onClick={()=>setGender('male')} className={`flex-1 p-3 rounded-lg font-bold ${gender==='male'?'bg-blue-600':'bg-slate-700'}`}>Boy</button><button onClick={()=>setGender('female')} className={`flex-1 p-3 rounded-lg font-bold ${gender==='female'?'bg-pink-600':'bg-slate-700'}`}>Girl</button></div>
                         <button onClick={handle} className="w-full bg-white text-slate-900 py-4 rounded-xl font-bold">Create</button>
@@ -485,7 +485,7 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
 const Dashboard = ({ member, events, theme, setView }) => {
     const today = new Date();
     // Re-calculating content here ensures dashboard updates immediately when prefs change
-    const content = getContentForDate(today, member.contentPref || 'inspiration');
+    const content = getContentForDate(today, member?.contentPref || 'inspiration');
     const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
     
     // Filter events for today
@@ -777,10 +777,11 @@ const SettingsScreen = ({ member, members, familyId, db, appId, theme, onUpdate,
     const [copied, setCopied] = useState(false);
 
     // --- RESTORED SETTINGS STATE ---
-    const [contentPref, setContentPref] = useState(member.contentPref || 'inspiration');
-    const [voiceGender, setVoiceGender] = useState(member.voiceSettings?.gender || 'female');
-    const [voiceSpeed, setVoiceSpeed] = useState(member.voiceSettings?.rate || 1);
-    const [voicePitch, setVoicePitch] = useState(member.voiceSettings?.pitch || 1);
+    // FIX: Added optional chaining (?) to safely access properties of 'member'
+    const [contentPref, setContentPref] = useState(member?.contentPref || 'inspiration');
+    const [voiceGender, setVoiceGender] = useState(member?.voiceSettings?.gender || 'female');
+    const [voiceSpeed, setVoiceSpeed] = useState(member?.voiceSettings?.rate || 1);
+    const [voicePitch, setVoicePitch] = useState(member?.voiceSettings?.pitch || 1);
 
     const updatePref = async (field, value) => {
         const newData = { ...member, [field]: value };
@@ -834,11 +835,11 @@ const SettingsScreen = ({ member, members, familyId, db, appId, theme, onUpdate,
         // Add the familyId parameter to create the smart link
         const smartLink = `${appLink}?familyId=${familyId}`;
 
-        const shareMessage = `Join our Family Hub Calendar! Click the link below to automatically enter our shared space:
-    
-🔗 ${smartLink}
-    
-(Family Code: ${familyId})`; // Provide code as fallback only
+        // Simplified message for cleaner copy/paste
+        const shareMessage = `Join our Family Hub Calendar!
+
+App Link (Click to Join): ${smartLink}
+Family Code (Manual Fallback): ${familyId}`;
         
         const setCopiedState = () => {
              setCopied(true);
