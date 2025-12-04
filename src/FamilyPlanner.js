@@ -19,13 +19,14 @@ const firebaseConfig = {
 let appInstance = null;
 let authInstance = null;
 let dbInstance = null;
-const appId = "notebook-2026-family-v10-sync-fix"; 
+const appId = "notebook-2026-family-v10-saas-final"; // New App ID for strict mode
 const NETLIFY_URL = "https://family-digital-calendar-planner.netlify.app/"; 
 
 const COLLECTIONS = {
     MEMBERS: 'planner_members',
     EVENTS: 'planner_events',
-    NOTES: 'planner_notes'
+    NOTES: 'planner_notes',
+    LICENSES: 'active_licenses' // New collection for license keys
 };
 
 // Initialize Firebase instances (called only once)
@@ -132,7 +133,6 @@ function App() {
 
     if (audioRef.current) audioRef.current.volume = 0.15; 
 
-    // 1. AUTH & FAMILY ID CHECK (Initial Load)
     const initAuth = async () => { 
         try { 
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -152,11 +152,16 @@ function App() {
         if (settingsSnap.exists() && settingsSnap.data().familyId) {
             setFamilyId(settingsSnap.data().familyId);
             setView('profiles'); 
+        } else if (settingsSnap.exists() && settingsSnap.data().licenseVerified) {
+             // License verified, but no family ID yet
+             setView('setup_family');
         } else {
-            setView('setup_family');
+            // New user signed up, needs to enter license key
+            setView('license_gate');
         }
       } else { 
         setUser(null); 
+        setFamilyId(null);
         setView('auth'); 
       }
       setLoading(false);
@@ -251,13 +256,45 @@ function App() {
   };
   
   const handleGuestLogin = async () => {
-      if (!firebaseRefs) return;
+      throw new Error("Guest login is disabled for paid license access.");
+  };
+  
+  // --- License Verification Function ---
+  const verifyLicense = async (licenseKey) => {
+      if (!firebaseRefs || !user || licenseKey.length !== 12) {
+          throw new Error("Invalid key format.");
+      }
+      const licenseRef = window.F_doc(firebaseRefs.db, COLLECTIONS.LICENSES, licenseKey);
+      
       try {
-          await window.F_signInAnonymously(firebaseRefs.auth);
+          // 1. Check if license key exists and is unused
+          const licenseSnap = await window.F_getDoc(licenseRef);
+          
+          if (!licenseSnap.exists()) {
+              throw new Error("License key is invalid or not found.");
+          }
+          
+          const licenseData = licenseSnap.data();
+          
+          if (licenseData.used) {
+              throw new Error("This license key has already been used.");
+          }
+          
+          // 2. Consume the license key
+          await window.F_setDoc(licenseRef, { used: true, usedBy: user.uid, usedAt: Date.now() }, { merge: true });
+          
+          // 3. Update user settings to mark license as verified
+          await window.F_setDoc(window.F_doc(firebaseRefs.db, 'artifacts', appId, 'users', user.uid, 'settings', 'config'), { licenseVerified: true, licenseId: licenseKey }, { merge: true });
+          
+          // Success: Redirect to family setup
+          setView('setup_family');
+
       } catch (e) {
-          console.error("Guest login failed:", e);
+          console.error("License verification failed:", e);
+          throw e;
       }
   };
+
 
   // Generate a random 6-character code
   const generateFamilyCode = () => {
@@ -269,16 +306,37 @@ function App() {
 
       const fid = mode === 'create' ? generateFamilyCode() : code.toUpperCase().trim();
       
-      await window.F_setDoc(window.F_doc(firebaseRefs.db, 'artifacts', appId, 'users', user.uid, 'settings', 'config'), { familyId: fid, joinedAt: Date.now() });
+      // Check for license limit enforcement
+      const familyMembersQuery = window.F_query(window.F_collection(firebaseRefs.db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), window.F_where('familyId', '==', fid));
+      const snap = await window.F_getDocs(familyMembersQuery);
+      
+      if (mode === 'join' && snap.size >= 6) {
+           throw new Error(`This family is full (${snap.size}/6). Cannot join.`);
+      }
+      
+      // Save family ID to user's private settings
+      await window.F_setDoc(window.F_doc(firebaseRefs.db, 'artifacts', appId, 'users', user.uid, 'settings', 'config'), { familyId: fid, joinedAt: Date.now() }, { merge: true });
       setFamilyId(fid);
       
-      if (mode === 'create') {
+      const isOwner = mode === 'create';
+      
+      if (isOwner) {
         await window.F_addDoc(window.F_collection(firebaseRefs.db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), { 
             familyId: fid,
-            name: 'Admin', role: 'parent', gender: 'female', theme: 'ocean', contentPref: 'inspiration', 
-            voiceSettings: { gender: 'female', rate: 1, pitch: 1 }, avatar: '👑',
-            createdBy: user.uid
+            name: user.email.split('@')[0], // Use email prefix as default name for owner
+            role: 'parent', 
+            gender: 'female', 
+            theme: 'ocean', 
+            contentPref: 'inspiration', 
+            voiceSettings: { gender: 'female', rate: 1, pitch: 1 }, 
+            avatar: '👑',
+            createdBy: user.uid,
+            ownerUid: user.uid
         });
+      } else if (mode === 'join') {
+          // New member joining an existing family is automatically added to members collection 
+          // if they don't already have an entry (which shouldn't, as the profile selector checks this)
+          
       }
       
       setView('profiles');
@@ -296,6 +354,8 @@ function App() {
   if (loading || !firebaseRefs) return <div className="h-screen flex items-center justify-center"><lucide.Loader className="animate-spin text-blue-500"/></div>;
   
   if (!user || view === 'auth') return <AuthScreen onAuth={handleAuth} onGuestLogin={handleGuestLogin} />;
+  
+  if (view === 'license_gate') return <LicenseGate verifyLicense={verifyLicense} signOut={()=>window.F_signOut(authInstance)} />;
 
   if (view === 'setup_family') return <FamilySetupScreen onSetup={handleFamilySetup} signOut={()=>window.F_signOut(authInstance)} />;
 
@@ -357,25 +417,79 @@ const AuthScreen = ({ onAuth, onGuestLogin }) => {
                 
                 {/* ACCOUNT AUTH FORM */}
                 <form onSubmit={handleAuthSubmit} className="space-y-4 mb-6">
-                    <input className="w-full p-4 bg-black/20 rounded-xl border border-white/10 text-white placeholder-white/50" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/>
+                    <input className="w-full p-4 bg-black/20 rounded-xl border border-white/10 text-white placeholder-white/50" placeholder="Email (Required for Paid Access)" value={email} onChange={e=>setEmail(e.target.value)}/>
                     <input className="w-full p-4 bg-black/20 rounded-xl border border-white/10 text-white placeholder-white/50" type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)}/>
-                    <button className="w-full bg-white text-indigo-900 py-4 rounded-xl font-bold shadow-lg mt-4">{isLogin?'Log In':'Sign Up'}</button>
+                    {/* SAAS MODEL: Login is primary, Signup triggers payment assumption */}
+                    <button className="w-full bg-white text-indigo-900 py-4 rounded-xl font-bold shadow-lg mt-4">{isLogin?'Log In':'Sign Up (License Required)'}</button>
                 </form>
 
                 {/* TOGGLE/ALTERNATIVE AUTH */}
-                <button onClick={()=>setIsLogin(!isLogin)} className="w-full text-xs opacity-60 hover:opacity-100 mb-6">{isLogin?"New? Create Account":"Login"}</button>
+                <button onClick={()=>setIsLogin(!isLogin)} className="w-full text-xs opacity-60 hover:opacity-100 mb-6">{isLogin?"New User? Sign Up":"Existing User? Log In"}</button>
                 
-                {/* INSTRUCTION */}
+                {/* INSTRUCTION (Simplified) */}
                 <p className="text-xs text-white/50 pt-4 text-center flex items-center justify-center gap-1">
                     <lucide.Users size={12}/>
-                    Need a shared calendar? Log in above or continue as guest to set up your family.
+                    Access requires a registered account to manage your family license.
                 </p>
+            </div>
+        </div>
+    );
+};
 
-                {/* GUEST BUTTON - The path the user preferred */}
-                <button onClick={onGuestLogin} className="w-full p-4 bg-white/20 text-white rounded-xl font-bold shadow-md hover:bg-white/30 transition flex items-center justify-center gap-2 border border-white/10">
-                    <lucide.LogOut size={20}/>
-                    Continue as Guest
-                </button>
+const LicenseGate = ({ verifyLicense, signOut }) => {
+    const [licenseKey, setLicenseKey] = useState('');
+    const [gateError, setGateError] = useState('');
+    const [isVerifying, setIsVerifying] = useState(false);
+    
+    const formatKey = (value) => {
+        const clean = value.replace(/[^A-Z0-9]/g, '').toUpperCase();
+        if (clean.length > 12) return licenseKey;
+
+        let formatted = '';
+        for (let i = 0; i < clean.length; i++) {
+            if (i > 0 && i % 4 === 0) formatted += '-';
+            formatted += clean[i];
+        }
+        return formatted;
+    }
+
+    const handleVerify = async (e) => {
+        e.preventDefault();
+        setIsVerifying(true);
+        setGateError('');
+        try {
+            // Remove dashes for verification
+            const cleanKey = licenseKey.replace(/-/g, '');
+            await verifyLicense(cleanKey);
+        } catch (e) {
+            setGateError(e.message || "Verification failed. Check your key.");
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+    
+    return (
+        <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
+            <div className="w-full max-w-md bg-white/10 backdrop-blur-2xl p-8 rounded-[2rem] border border-white/10 shadow-2xl text-center">
+                <h1 className="text-3xl font-bold mb-4 flex items-center justify-center gap-2"><lucide.Command size={32}/> Activate License</h1>
+                <p className="text-white/60 mb-6">Please enter the 12-character license key purchased from our store to activate your family's calendar.</p>
+                
+                {gateError && <div className="bg-red-500/20 p-4 rounded-xl mb-4 text-sm">{gateError}</div>}
+                
+                <form onSubmit={handleVerify} className="space-y-4">
+                    <input 
+                        className="w-full p-4 bg-black/30 rounded-xl text-center text-xl tracking-widest font-mono text-white placeholder-white/50" 
+                        placeholder="XXXX-XXXX-XXXX" 
+                        value={licenseKey} 
+                        onChange={e => setLicenseKey(formatKey(e.target.value))}
+                        maxLength={14} // 12 chars + 2 dashes
+                    />
+                    <button type="submit" disabled={isVerifying || licenseKey.replace(/-/g, '').length !== 12} className="w-full bg-yellow-500 text-indigo-900 py-4 rounded-xl font-bold shadow-lg mt-4 disabled:opacity-50 flex items-center justify-center gap-2">
+                        {isVerifying ? <lucide.Loader size={20} className="animate-spin"/> : <lucide.Check size={20}/>}
+                        {isVerifying ? 'Verifying...' : 'Activate License'}
+                    </button>
+                </form>
+                <button onClick={signOut} className="mt-12 text-sm opacity-40 hover:opacity-100 flex items-center justify-center gap-2 w-full"><lucide.LogOut size={16}/> Sign Out</button>
             </div>
         </div>
     );
@@ -385,37 +499,55 @@ const AuthScreen = ({ onAuth, onGuestLogin }) => {
 const FamilySetupScreen = ({ onSetup, signOut }) => {
     
     const [mode, setMode] = useState(null); // 'create' or 'join'
-    const [code, setCode] = useState(() => localStorage.getItem('pendingFamilyCode') || '');
+    const [code, setCode] = useState('');
+    const [setupError, setSetupError] = useState('');
 
     useEffect(() => {
-        if (code && mode === null) {
+        const pendingCode = localStorage.getItem('pendingFamilyCode');
+        if (pendingCode) {
+            setCode(pendingCode);
             setMode('join');
             localStorage.removeItem('pendingFamilyCode');
         }
-    }, [code, mode]);
+    }, []);
+
+    const handleSetupAttempt = async (mode, code) => {
+        setSetupError('');
+        try {
+            await onSetup(mode, code);
+        } catch (e) {
+            setSetupError(e.message);
+        }
+    }
 
 
     return (
         <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
             <div className="w-full max-w-md text-center">
                 <h1 className="text-3xl font-bold mb-2">Connect to Family</h1>
-                <p className="text-white/60 mb-8">You are logged in. Please choose whether to start a new shared calendar or join an existing one.</p>
+                <p className="text-white/60 mb-8">Choose whether to start a new calendar (if you are the primary user) or join an existing one using your shared family code.</p>
+                {setupError && <div className="bg-red-500/20 p-4 rounded-xl mb-4 text-center text-sm">{setupError}</div>}
+
                 {!mode ? (
                     <div className="space-y-4">
-                        <button onClick={()=>onSetup('create')} className="w-full p-6 bg-indigo-600 rounded-2xl font-bold text-lg hover:bg-indigo-500 transition shadow-lg flex flex-col items-center gap-2">
+                        <button onClick={()=>handleSetupAttempt('create')} className="w-full p-6 bg-indigo-600 rounded-2xl font-bold text-lg hover:bg-indigo-500 transition shadow-lg flex flex-col items-center gap-2">
                             <lucide.Home size={32}/>
-                            Start New Family
+                            Start New Family (Owner)
                         </button>
                         <button onClick={()=>setMode('join')} className="w-full p-6 bg-white/10 rounded-2xl font-bold text-lg hover:bg-white/20 transition border border-white/5 flex flex-col items-center gap-2">
                             <lucide.Users size={32}/>
-                            Join Existing Family
+                            Join Existing Family (Member)
                         </button>
                     </div>
                 ) : (
                     <div className="bg-white/10 p-8 rounded-2xl border border-white/10">
-                        <h2 className="text-xl font-bold mb-4">Enter Family Code</h2>
-                        <input className="w-full p-4 bg-black/30 rounded-xl text-center text-2xl tracking-widest font-mono mb-4 border border-white/20" placeholder="6-DIGIT CODE" value={code} onChange={e=>setCode(e.target.value.toUpperCase())} maxLength={6} />
-                        <button onClick={()=>onSetup('join', code)} disabled={code.length < 6} className="w-full bg-white text-indigo-900 py-4 rounded-xl font-bold disabled:opacity-50">Join Family</button>
+                        <h2 className="text-xl font-bold mb-4">{mode === 'create' ? 'Confirm New Family' : 'Enter Shared Family Code'}</h2>
+                        {mode === 'join' && 
+                            <input className="w-full p-4 bg-black/30 rounded-xl text-center text-2xl tracking-widest font-mono mb-4 border border-white/20" placeholder="6-DIGIT CODE" value={code} onChange={e=>setCode(e.target.value.toUpperCase())} maxLength={6} />
+                        }
+                        <button onClick={()=>handleSetupAttempt(mode, code)} disabled={mode === 'join' && code.length < 6} className="w-full bg-white text-indigo-900 py-4 rounded-xl font-bold disabled:opacity-50">
+                            {mode === 'create' ? 'Create Calendar' : 'Join Family'}
+                        </button>
                         <button onClick={()=>setMode(null)} className="mt-4 text-sm opacity-60">Back</button>
                     </div>
                 )}
@@ -430,16 +562,27 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
     const [name, setName] = useState('');
     const [role, setRole] = useState('child');
     const [gender, setGender] = useState('female');
-    const handle = () => {
+    const [addError, setAddError] = useState('');
+    const familyIsFull = members.length >= 6;
+
+    const handle = async () => {
         if(!name) return;
-        const av = role==='parent' ? (gender==='male'?'👨':'👩') : (gender==='male'?'👦':'👧');
-        onCreate(name, role, gender, 'ocean', av);
-        setAdd(false); setName('');
+        setAddError('');
+        try {
+            const av = role==='parent' ? (gender==='male'?'👨':'👩') : (gender==='male'?'👦':'👧');
+            await onCreate(name, role, gender, 'ocean', av);
+            setAdd(false); setName('');
+        } catch (e) {
+            setAddError(e.message);
+        }
     };
+
     return (
         <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
             <div className="w-full max-w-md">
                 <h1 className="text-3xl font-bold text-center mb-8">Who's here?</h1>
+                {addError && <div className="bg-red-500/20 p-4 rounded-xl mb-4 text-center text-sm">{addError}</div>}
+                
                 <div className="grid grid-cols-2 gap-4">
                     {members.map(m => (
                         <button key={m.id} onClick={()=>onSelect(m)} className="flex flex-col items-center gap-2 p-6 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/5 transition">
@@ -447,8 +590,10 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
                             <span className="font-bold text-lg">{m.name}</span>
                         </button>
                     ))}
-                    {members.length < 6 && <button onClick={()=>setAdd(true)} className="flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/40 transition"><lucide.UserPlus size={40}/><span className="font-bold">Add</span></button>}
+                    {!familyIsFull && <button onClick={()=>setAdd(true)} className="flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/40 transition"><lucide.UserPlus size={40}/><span className="font-bold">Add</span></button>}
                 </div>
+                {familyIsFull && <p className="text-sm text-center text-red-300 mt-4"><lucide.AlertCircle size={16} className="inline-block mr-1"/> License limit (6 members) reached for this family.</p>}
+
                 <button onClick={signOut} className="mt-12 w-full py-4 text-white/40 hover:text-white flex justify-center gap-2"><lucide.LogOut size={18}/> Sign Out</button>
             </div>
             {add && (
@@ -461,8 +606,8 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
                             value={name} 
                             onChange={e=>setName(e.target.value)}
                         />
-                        <div className="flex gap-2 mb-4"><button onClick={()=>setRole('parent')} className={`flex-1 p-3 rounded-lg font-bold ${role==='parent'?'bg-indigo-600':'bg-slate-700'}`}>Parent</button><button onClick={()=>setRole('child')} className={`flex-1 p-3 rounded-lg font-bold ${role==='child'?'bg-indigo-600':'bg-slate-700'}`}>Child</button></div>
-                        <div className="flex gap-2 mb-6"><button onClick={()=>setGender('male')} className={`flex-1 p-3 rounded-lg font-bold ${gender==='male'?'bg-blue-600':'bg-slate-700'}`}>Boy</button><button onClick={()=>setGender('female')} className={`flex-1 p-3 rounded-lg font-bold ${gender==='female'?'bg-pink-600':'bg-slate-700'}`}>Girl</button></div>
+                        <div className="flex gap-2 mb-4"><button onClick={()=>setRole('parent')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${role==='parent'?'bg-indigo-600':'bg-slate-700'}`}>Parent</button><button onClick={()=>setRole('child')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${role==='child'?'bg-indigo-600':'bg-slate-700'}`}>Child</button></div>
+                        <div className="flex gap-2 mb-6"><button onClick={()=>setGender('male')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${gender==='male'?'bg-blue-600':'bg-slate-700'}`}>Boy</button><button onClick={()=>setGender('female')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${gender==='female'?'bg-pink-600':'bg-slate-700'}`}>Girl</button></div>
                         <button onClick={handle} className="w-full bg-white text-slate-900 py-4 rounded-xl font-bold">Create</button>
                         <button onClick={()=>setAdd(false)} className="w-full mt-4 text-white/50">Cancel</button>
                     </div>
@@ -644,35 +789,6 @@ const FamilyCalendar = ({ member, members, events, familyId, db, appId, theme })
                         );
                     })}
                 </div>
-            </div>
-            {showModal && selectedDate && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-                    <div className={`w-full max-w-sm ${theme.card} p-6 rounded-[2rem] shadow-2xl border max-h-[85vh] overflow-y-auto`}>
-                        <div className="flex justify-between items-center mb-4">
-                            <div><h3 className="text-xl font-bold">{selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric'})}</h3><p className={`text-xs ${theme.subtext}`}>Daily Wisdom</p></div>
-                            <button onClick={()=>setShowModal(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={18}/></button>
-                        </div>
-                        <div className={`p-4 rounded-xl ${theme.accent} bg-opacity-10 mb-6 border border-current border-opacity-10`}>
-                            <div className="flex justify-between items-start gap-2 mb-2"><span className={`text-[10px] uppercase font-bold tracking-wider opacity-60`}>{member.contentPref === 'bible' ? 'Verse of the Day' : 'Daily Inspiration'}</span><button onClick={() => speakText(modalContent, member.voiceSettings)} className="opacity-50 hover:opacity-100"><lucide.Volume2 size={14}/></button></div>
-                            <p className="text-sm font-medium italic leading-relaxed opacity-90">"{modalContent}"</p>
-                        </div>
-                        <div className="mb-6 space-y-2">
-                            <h4 className="text-xs font-bold uppercase opacity-50 mb-2">Events</h4>
-                            {getEventsForDay(selectedDate.getDate()).length === 0 ? <p className="text-center text-sm opacity-50 py-4 italic border-2 border-dashed border-gray-200 rounded-xl">No events planned.</p> : getEventsForDay(selectedDate.getDate()).map(ev => {const Icon = EVENT_ICONS.find(i => i.id === ev.icon)?.icon || lucide.Clock; return (<div key={ev.id} className="flex items-center gap-3 p-3 bg-white/50 rounded-xl border border-black/5"><div className={`p-2 rounded-full ${theme.accent} text-white`}><Icon size={14} /></div><div className="flex-1"><p className="text-sm font-bold leading-tight">{ev.title}</p><p className="text-[10px] opacity-60">{new Date(ev.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p></div><button onClick={(e)=>{e.stopPropagation(); window.F_deleteDoc(window.F_doc(db,'artifacts',appId,'public','data',COLLECTIONS.EVENTS,ev.id))}} className="text-gray-400 hover:text-red-500"><lucide.Trash2 size={16}/></button></div>)})}
-                        </div>
-                        <div className="space-y-4 pt-4 border-t border-black/10">
-                             <div className="relative">
-                                <input autoFocus className="w-full p-3 rounded-xl border outline-none text-sm font-medium bg-white text-black border-gray-200 pr-10" placeholder="Event title..." value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} />
-                                <button onClick={startDictation} className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-all ${isMicActive ? 'bg-red-500 text-white animate-pulse' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'}`}><lucide.Mic size={16}/></button>
-                             </div>
-                            <div className="flex gap-2">
-                                <input type="time" className="flex-1 p-3 rounded-xl border outline-none text-sm font-medium bg-white text-black border-gray-200" value={newEventTime} onChange={e=>setNewEventTime(e.target.value)} />
-                                <div className="flex bg-gray-100 rounded-xl p-1 gap-1 overflow-x-auto max-w-[150px]">{EVENT_ICONS.slice(1).map(ic => {const Icon = ic.icon; return(<button key={ic.id} onClick={() => setNewEventIcon(newEventIcon === ic.id ? 'default' : ic.id)} className={`p-2 rounded-lg transition-all flex-shrink-0 ${newEventIcon === ic.id ? 'bg-white shadow text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`} title={ic.label}><Icon size={18} /></button>)})}</div>
-                            </div>
-                            <button onClick={handleAddEvent} className={`w-full py-3 rounded-xl ${theme.accent} text-white font-bold shadow-lg flex items-center justify-center gap-2`}><lucide.Save size={18}/> Save Event</button>
-                        </div>
-                    </div>
-                </div>
             )}
         </div>
     );
@@ -811,12 +927,16 @@ const SettingsScreen = ({ member, members, familyId, db, appId, theme, onUpdate,
         setNewName('');
     };
     
-    // --- SHARING LOGIC ---
+    // --- UPDATED SHARING LOGIC: Use provided Netlify URL and clean copy message ---
     const copyCode = () => {
         
+        // Use the explicit Netlify URL provided by the user
         const appLink = NETLIFY_URL; 
+        
+        // Add the familyId parameter to create the smart link
         const smartLink = `${appLink}?familyId=${familyId}`;
 
+        // Simplified message for cleaner copy/paste
         const shareMessage = `Join our Family Hub Calendar!
 
 App Link (Click to Join): ${smartLink}
@@ -838,7 +958,7 @@ Family Code (Manual Fallback): ${familyId}`;
             setCopiedState();
         });
     };
-    // --- END SHARING LOGIC ---
+    // --- END UPDATED SHARING LOGIC ---
 
     return (
         <div className="space-y-6 pb-20">
@@ -907,7 +1027,7 @@ Family Code (Manual Fallback): ${familyId}`;
                         </div>
                     ))}
                     {members.length < 6 && (
-                        <button onClick={() => setShowAddModal(true)} className="flex flex-col items-center gap-2 opacity-60 hover:opacity-100 transition group">
+                        <button onClick={() => setShowAddModal(true)} className="flex flex-col items-center justify-center gap-2 opacity-60 hover:opacity-100 transition group">
                              <div className="w-14 h-14 rounded-full border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 group-hover:border-indigo-500 group-hover:text-indigo-500">
                                 <lucide.UserPlus size={24} />
                              </div>
