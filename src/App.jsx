@@ -30,7 +30,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = "notebook-2026-family-v10-sync-fix"; // Updated App ID
+const appId = "notebook-2026-family-v10-sync-fix"; // Keeping the App ID stable for sync testing
 
 // --- SHARED DATA COLLECTIONS ---
 const COLLECTIONS = {
@@ -124,10 +124,6 @@ export default function App() {
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
   const [alertedEvents, setAlertedEvents] = useState(new Set()); 
   
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
   const audioRef = useRef(null);
 
   useEffect(() => { if (audioRef.current) audioRef.current.volume = 0.15; }, []);
@@ -143,9 +139,9 @@ export default function App() {
         
         if (settingsSnap.exists() && settingsSnap.data().familyId) {
             setFamilyId(settingsSnap.data().familyId);
-            // We rely on the dedicated useEffect for members/events sync now
             setView('profiles'); 
         } else {
+            // User authenticated but no family ID set -> go to setup
             setView('setup_family');
         }
       } else { 
@@ -157,7 +153,7 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // 2. REAL-TIME MEMBERS SYNC (CRITICAL FIX FOR SHARING)
+  // 2. REAL-TIME MEMBERS SYNC (CRITICAL)
   useEffect(() => {
     if (!familyId) {
         setMembers([]);
@@ -170,28 +166,21 @@ export default function App() {
         const currentMembers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setMembers(currentMembers);
         
-        // Update current member state with latest data (theme/pref updates)
         if (currentMember) {
              const updatedCurrent = currentMembers.find(m => m.id === currentMember.id);
              if (updatedCurrent) {
                  setCurrentMember(updatedCurrent);
              } else {
-                 // Current profile was deleted - force user back to profiles screen
                  setCurrentMember(null);
                  setView('profiles');
              }
-        }
-        
-        // If we are stuck at setup but members exist, move to profiles
-        if (currentMembers.length > 0 && (view === 'setup_family' || view === 'auth')) {
-             setView('profiles');
         }
     }, (error) => {
         console.error("Failed to sync members:", error);
     });
 
     return () => unsub();
-  }, [familyId, view, currentMember ? currentMember.id : null]); // Depend on familyId and currentMember ID
+  }, [familyId, currentMember ? currentMember.id : null]); 
 
   // 3. EVENTS LISTENER
   useEffect(() => {
@@ -237,7 +226,27 @@ export default function App() {
     return () => clearInterval(intervalId);
   }, [events, currentMember, alertedEvents]);
 
-  const handleAuth = async (e) => { e.preventDefault(); try { if (isLogin) await signInWithEmailAndPassword(auth, email, password); else await createUserWithEmailAndPassword(auth, email, password); } catch (e) { setAuthError(e.message); } };
+  const handleAuth = async (e, email, password, isLogin) => { 
+      e.preventDefault(); 
+      try { 
+          if (isLogin) {
+              await signInWithEmailAndPassword(auth, email, password); 
+          } else {
+              await createUserWithEmailAndPassword(auth, email, password);
+          }
+      } catch (e) { 
+          // Error handling handled within AuthScreen now
+          throw e;
+      } 
+  };
+  
+  const handleGuestLogin = async () => {
+      try {
+          await signInAnonymously(auth);
+      } catch (e) {
+          console.error("Guest login failed:", e);
+      }
+  };
 
   // Generate a random 6-character code
   const generateFamilyCode = () => {
@@ -245,13 +254,15 @@ export default function App() {
   };
 
   const handleFamilySetup = async (mode, code) => {
-      // Use random code for creation, or user provided code for joining
+      // Logic for creating or joining a family is handled by the main component
       const fid = mode === 'create' ? generateFamilyCode() : code.toUpperCase().trim();
       
+      // Save family ID to user's private settings
       await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'config'), { familyId: fid, joinedAt: Date.now() });
       setFamilyId(fid);
       
       if (mode === 'create') {
+        // Create initial Admin member in PUBLIC collection
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), { 
             familyId: fid,
             name: 'Admin', role: 'parent', gender: 'female', theme: 'ocean', contentPref: 'inspiration', 
@@ -273,8 +284,9 @@ export default function App() {
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader className="animate-spin text-blue-500"/></div>;
   
-  if (!user || view === 'auth') return <AuthScreen email={email} setEmail={setEmail} password={password} setPassword={setPassword} isLogin={isLogin} setIsLogin={setIsLogin} handleAuth={handleAuth} handleGuestLogin={async()=>{ try{const a=await signInAnonymously(auth); setUser(a.user);}catch(e){}}} error={authError}/>;
-  
+  if (!user || view === 'auth') return <AuthScreen onAuth={handleAuth} onFamilySetup={handleFamilySetup} onGuestLogin={handleGuestLogin} setUser={setUser} setFamilyId={setFamilyId} setView={setView} />;
+
+  // The setup_family screen is only shown if the user is authenticated but lacks a familyId
   if (view === 'setup_family') return <FamilySetupScreen onSetup={handleFamilySetup} signOut={()=>signOut(auth)} />;
 
   if (view === 'profiles') return <ProfileSelector members={members} onSelect={m=>{setCurrentMember(m); setView('home');}} onCreate={createMember} signOut={()=>signOut(auth)}/>;
@@ -311,31 +323,120 @@ export default function App() {
 }
 
 // --- AUTH & SETUP SCREENS ---
-const AuthScreen = ({email, setEmail, password, setPassword, isLogin, setIsLogin, handleAuth, handleGuestLogin, error}) => (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 flex items-center justify-center p-6 text-white">
-        <div className="w-full max-w-md bg-white/10 backdrop-blur-2xl p-8 rounded-[2rem] border border-white/10 shadow-2xl">
-            <h1 className="text-3xl font-bold text-center mb-8">Family Hub</h1>
-            {error && <div className="bg-red-500/20 p-4 rounded-xl mb-4 text-center text-sm">{error}</div>}
-            <form onSubmit={handleAuth} className="space-y-4">
-                <input className="w-full p-4 bg-black/20 rounded-xl border border-white/10 text-white placeholder-white/50" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/>
-                <input className="w-full p-4 bg-black/20 rounded-xl border border-white/10 text-white placeholder-white/50" type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)}/>
-                <button className="w-full bg-white text-indigo-900 py-4 rounded-xl font-bold shadow-lg mt-4">{isLogin?'Enter':'Create Account'}</button>
-            </form>
-            <button onClick={handleGuestLogin} className="w-full mt-4 py-3 border border-white/20 rounded-xl text-sm font-bold">Guest Mode</button>
-            <button onClick={()=>setIsLogin(!isLogin)} className="w-full mt-4 text-xs opacity-60 hover:opacity-100">{isLogin?"New? Create Account":"Login"}</button>
+const AuthScreen = ({ onAuth, onFamilySetup, onGuestLogin }) => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [authError, setAuthError] = useState('');
+    const [isLogin, setIsLogin] = useState(true);
+    const [showJoinModal, setShowJoinModal] = useState(false);
+    const [joinCode, setJoinCode] = useState('');
+
+    const handleAuthSubmit = async (e) => {
+        e.preventDefault();
+        setAuthError('');
+        try {
+            await onAuth(e, email, password, isLogin);
+        } catch (e) {
+            setAuthError(e.message);
+        }
+    };
+    
+    // User chooses to start a new family
+    const handleStartNewFamily = async () => {
+        setAuthError('');
+        try {
+             // 1. Authenticate user anonymously first if needed, otherwise use existing auth
+             if (!auth.currentUser) await onGuestLogin();
+             // 2. Proceed to family creation using the authenticated user's ID
+             onFamilySetup('create');
+        } catch(e) {
+            setAuthError("Failed to start family. Please try logging in with an email first.");
+        }
+    };
+
+    const handleJoinFamily = async () => {
+        setAuthError('');
+        try {
+            // 1. Authenticate user anonymously first if needed
+            if (!auth.currentUser) await onGuestLogin();
+            // 2. Proceed to family join with code
+            onFamilySetup('join', joinCode);
+            setShowJoinModal(false);
+        } catch(e) {
+            setAuthError("Failed to join family. Check the code or try logging in with an email.");
+        }
+    };
+
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 flex flex-col items-center justify-center p-6 text-white">
+            <div className="w-full max-w-md bg-white/10 backdrop-blur-2xl p-8 rounded-[2rem] border border-white/10 shadow-2xl">
+                <h1 className="text-3xl font-bold text-center mb-8">Family Hub</h1>
+                {authError && <div className="bg-red-500/20 p-4 rounded-xl mb-4 text-center text-sm">{authError}</div>}
+                
+                {/* ACCOUNT AUTH FORM */}
+                <form onSubmit={handleAuthSubmit} className="space-y-4 mb-6">
+                    <input className="w-full p-4 bg-black/20 rounded-xl border border-white/10 text-white placeholder-white/50" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/>
+                    <input className="w-full p-4 bg-black/20 rounded-xl border border-white/10 text-white placeholder-white/50" type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)}/>
+                    <button className="w-full bg-white text-indigo-900 py-4 rounded-xl font-bold shadow-lg mt-4">{isLogin?'Log In':'Sign Up'}</button>
+                </form>
+
+                {/* TOGGLE/ALTERNATIVE AUTH */}
+                <button onClick={()=>setIsLogin(!isLogin)} className="w-full text-xs opacity-60 hover:opacity-100 mb-6">{isLogin?"New? Create Account":"Login"}</button>
+                
+                <p className="text-sm font-bold text-white/70 text-center mb-4">OR JOIN A FAMILY</p>
+
+                {/* SHARED FAMILY OPTIONS */}
+                <div className="space-y-4">
+                    <button onClick={handleStartNewFamily} className="w-full p-4 bg-yellow-500 text-indigo-900 rounded-xl font-bold shadow-md hover:bg-yellow-400 transition flex items-center justify-center gap-2">
+                        <Home size={20}/>
+                        Start New Family
+                    </button>
+                    <button onClick={() => setShowJoinModal(true)} className="w-full p-4 bg-white/20 text-white rounded-xl font-bold shadow-md hover:bg-white/30 transition flex items-center justify-center gap-2 border border-white/10">
+                        <Users size={20}/>
+                        Join Existing Family
+                    </button>
+                    <button onClick={onGuestLogin} className="w-full mt-4 py-3 text-xs opacity-40 hover:opacity-100">Continue as Guest (No Family)</button>
+                </div>
+            </div>
+            
+            {/* JOIN FAMILY MODAL */}
+            {showJoinModal && (
+                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50">
+                    <div className="bg-slate-800 p-8 rounded-3xl w-full max-w-sm">
+                        <h3 className="text-xl font-bold mb-6">Enter Family Code</h3>
+                        <input className="w-full p-4 bg-black/30 rounded-xl text-white text-center text-2xl tracking-widest font-mono mb-4 border border-white/20" 
+                            placeholder="6-DIGIT CODE" 
+                            value={joinCode} 
+                            onChange={e=>setJoinCode(e.target.value.toUpperCase())} 
+                            maxLength={6} />
+                        <button onClick={handleJoinFamily} disabled={joinCode.length < 6} className="w-full bg-white text-slate-900 py-4 rounded-xl font-bold disabled:opacity-50">Join</button>
+                        <button onClick={()=>setShowJoinModal(false)} className="w-full mt-4 text-white/50">Cancel</button>
+                    </div>
+                </div>
+            )}
         </div>
-    </div>
-);
+    );
+};
+
 
 const FamilySetupScreen = ({ onSetup, signOut }) => {
+    // This screen is now effectively the setup step for the user who just authenticated
+    // but doesn't have a Family ID set yet.
+    // However, since the AuthScreen now handles new family setup, this screen
+    // should theoretically only be reached if the user authenticated (via email or guest)
+    // and then manually chose "Join Existing Family" or something broke.
+    
+    // To ensure compatibility for users who previously had the old flow:
+    
     const [mode, setMode] = useState(null); // 'create' or 'join'
     const [code, setCode] = useState('');
 
     return (
         <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
             <div className="w-full max-w-md text-center">
-                <h1 className="text-3xl font-bold mb-2">Welcome!</h1>
-                <p className="text-white/60 mb-8">Connect to your family calendar.</p>
+                <h1 className="text-3xl font-bold mb-2">Connect to Family</h1>
+                <p className="text-white/60 mb-8">You are logged in, but not connected to a shared calendar. Please choose an option.</p>
                 {!mode ? (
                     <div className="space-y-4">
                         <button onClick={()=>onSetup('create')} className="w-full p-6 bg-indigo-600 rounded-2xl font-bold text-lg hover:bg-indigo-500 transition shadow-lg flex flex-col items-center gap-2">
@@ -385,7 +486,7 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
                     ))}
                     {members.length < 6 && <button onClick={()=>setAdd(true)} className="flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/40 transition"><UserPlus size={40}/><span className="font-bold">Add</span></button>}
                 </div>
-                <button onClick={signOut} className="mt-12 w-full py-4 text-white/40 hover:text-white flex justify-center gap-2"><LogOut size={18}/> Log Out</button>
+                <button onClick={signOut} className="mt-12 w-full py-4 text-white/40 hover:text-white flex justify-center gap-2"><LogOut size={18}/> Sign Out</button>
             </div>
             {add && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50">
