@@ -799,12 +799,18 @@ const SettingsScreen = ({ member, members, familyId, db, appId, theme, onUpdate,
         setNewName('');
     };
     
-    // --- UPDATED SHARING LOGIC ---
+    // --- UPDATED SHARING LOGIC: Ensure link starts with protocol for clickability ---
     const copyCode = () => {
+        // Ensure the link is prefixed with https:// so messaging apps recognize it as clickable
+        let appLink = window.location.href;
+        if (!appLink.startsWith('https://') && !appLink.startsWith('http://')) {
+            appLink = `https://${appLink}`;
+        }
+
         const shareMessage = `Join our Family Calendar!
     
 Family Code: ${familyId}
-App Link: ${window.location.href}
+App Link: ${appLink}
     
 Sign in as Guest or create an account, then enter the code to sync our schedules.`;
         
@@ -818,7 +824,7 @@ Sign in as Guest or create an account, then enter the code to sync our schedules
             navigator.share({
                 title: 'Join Family Hub Calendar',
                 text: shareMessage,
-                url: window.location.href,
+                url: appLink,
             }).then(() => {
                  setCopiedState(); // Use state update on success
             }).catch((error) => {
