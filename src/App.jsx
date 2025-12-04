@@ -2,16 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Mic, MicOff, PenTool, Calendar as CalendarIcon, Settings, Home, 
   Volume2, VolumeX, LogOut, Check, Heart, BookOpen,
-  Users, UserPlus, ListChecks, Loader, Trash2, PlayCircle, Clock, Bell, User
+  Users, UserPlus, ListChecks, Loader, Trash2, PlayCircle, Clock, Bell, User, Filter,
+  Palette, Music, ChevronLeft, ChevronRight, X, Gift, GraduationCap, Briefcase, 
+  Dumbbell, Utensils, Plane, Sun, MapPin, AlertCircle, Command, Save, Share2, Copy,
+  Speaker, Sliders
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, 
-  signOut, onAuthStateChanged, signInAnonymously 
+  signOut, onAuthStateChanged, signInAnonymously, signInWithCustomToken 
 } from 'firebase/auth';
 import { 
   getFirestore, collection, addDoc, query, where, 
-  onSnapshot, deleteDoc, doc, setDoc, updateDoc, getDoc, orderBy, getDocs 
+  onSnapshot, deleteDoc, doc, setDoc, updateDoc, getDoc, orderBy, getDocs, limit 
 } from 'firebase/firestore';
 
 // --- FIREBASE CONFIGURATION ---
@@ -27,17 +30,27 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = "notebook-2026-family-v2"; 
+const appId = "notebook-2026-family-v9-fixes"; 
 
-// --- CONTENT DATABASES ---
+// --- SHARED DATA COLLECTIONS ---
+const COLLECTIONS = {
+    MEMBERS: 'planner_members',
+    EVENTS: 'planner_events',
+    NOTES: 'planner_notes'
+};
+
+// --- CONTENT ---
 const BIBLE_VERSES = [
-  "For I know the plans I have for you, declares the Lord, plans to prosper you. - Jeremiah 29:11",
-  "I can do all things through Christ who strengthens me. - Philippians 4:13",
-  "Trust in the Lord with all your heart. - Proverbs 3:5",
-  "Be strong and courageous. Do not be afraid. - Joshua 1:9",
-  "The Lord is my shepherd, I lack nothing. - Psalm 23:1",
-  "Love is patient, love is kind. - 1 Corinthians 13:4",
-  "This is the day that the Lord has made; let us rejoice and be glad in it. - Psalm 118:24"
+  "For I know the plans I have for you,” declares the LORD, “plans to prosper you and not to harm you, plans to give you hope and a future. - Jeremiah 29:11",
+  "I can do all things through Christ who gives me strength. - Philippians 4:13",
+  "Trust in the LORD with all your heart and lean not on your own understanding. - Proverbs 3:5",
+  "Have I not commanded you? Be strong and courageous. Do not be afraid. - Joshua 1:9",
+  "But those who hope in the LORD will renew their strength. They will soar on wings like eagles. - Isaiah 40:31",
+  "Love is patient, love is kind. It does not envy, it does not boast, it is not proud. - 1 Corinthians 13:4",
+  "The LORD is my shepherd, I lack nothing. - Psalm 23:1",
+  "And we know that in all things God works for the good of those who love him. - Romans 8:28",
+  "The name of the LORD is a fortified tower; the righteous run to it and are safe. - Proverbs 18:10",
+  "Therefore do not worry about tomorrow, for tomorrow will worry about itself. - Matthew 6:34"
 ];
 
 const INSPIRATION_QUOTES = [
@@ -45,704 +58,906 @@ const INSPIRATION_QUOTES = [
   "Success is not final, failure is not fatal: it is the courage to continue that counts.",
   "Believe you can and you're halfway there.",
   "Act as if what you do makes a difference. It does.",
-  "Keep your face always toward the sunshine and shadows will fall behind you.",
-  "What you get by achieving your goals is not as important as what you become.",
-  "Happiness is not something ready made. It comes from your own actions."
+  "Happiness is not something ready made. It comes from your own actions.",
+  "The future belongs to those who believe in the beauty of their dreams.",
+  "You don't choose your family. They are God's gift to you, as you are to them.",
+  "It is not how much we have, but how much we enjoy, that makes happiness.",
+  "The only person you are destined to become is the person you decide to be.",
+  "Spread love everywhere you go. Let no one ever come to you without leaving happier."
 ];
 
-const generateDailyContent = (date, type) => {
-  const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
-  const pool = type === 'bible' ? BIBLE_VERSES : INSPIRATION_QUOTES;
-  return pool[dayOfYear % pool.length];
+const EVENT_ICONS = [
+  { id: 'default', icon: Clock, label: 'General' },
+  { id: 'birthday', icon: Gift, label: 'Birthday' },
+  { id: 'school', icon: GraduationCap, label: 'School' },
+  { id: 'work', icon: Briefcase, label: 'Work' },
+  { id: 'sports', icon: Dumbbell, label: 'Sports' },
+  { id: 'meal', icon: Utensils, label: 'Meal' },
+  { id: 'travel', icon: Plane, label: 'Travel' },
+  { id: 'holiday', icon: Sun, label: 'Holiday' },
+  { id: 'church', icon: BookOpen, label: 'Devotion' },
+];
+
+const THEMES = {
+  ocean: { name: 'Ocean', bg: 'bg-cyan-50', text: 'text-slate-900', accent: 'bg-cyan-600', card: 'bg-white/90 backdrop-blur border-cyan-100', subtext: 'text-slate-500' },
+  midnight: { name: 'Midnight', bg: 'bg-slate-950', text: 'text-slate-100', accent: 'bg-indigo-600', card: 'bg-slate-900/90 backdrop-blur border-slate-700', subtext: 'text-slate-400' },
+  forest: { name: 'Forest', bg: 'bg-emerald-50', text: 'text-emerald-950', accent: 'bg-emerald-700', card: 'bg-white/90 backdrop-blur border-emerald-100', subtext: 'text-emerald-800' },
+  sunset: { name: 'Sunset', bg: 'bg-orange-50', text: 'text-stone-900', accent: 'bg-orange-600', card: 'bg-white/90 backdrop-blur border-orange-100', subtext: 'text-stone-600' },
+  lavender: { name: 'Lavender', bg: 'bg-purple-50', text: 'text-purple-950', accent: 'bg-purple-600', card: 'bg-white/90 backdrop-blur border-purple-100', subtext: 'text-purple-800' },
+  royal: { name: 'Royal', bg: 'bg-slate-50', text: 'text-slate-900', accent: 'bg-yellow-600', card: 'bg-white/90 backdrop-blur border-yellow-100', subtext: 'text-yellow-700' },
+  berry: { name: 'Berry', bg: 'bg-pink-50', text: 'text-pink-950', accent: 'bg-pink-600', card: 'bg-white/90 backdrop-blur border-pink-100', subtext: 'text-pink-800' },
+  sunrise: { name: 'Sunrise', bg: 'bg-rose-50', text: 'text-rose-900', accent: 'bg-rose-500', card: 'bg-white/90 backdrop-blur border-rose-100', subtext: 'text-rose-700' },
 };
 
-// --- HELPER: TTS ---
+// --- HELPER FUNCTIONS ---
+const getContentForDate = (dateObj, type) => {
+  const dateStr = dateObj.toDateString();
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) hash = dateStr.charCodeAt(i) + ((hash << 5) - hash);
+  const pool = type === 'bible' ? BIBLE_VERSES : INSPIRATION_QUOTES;
+  return pool[Math.abs(hash) % pool.length];
+};
+
 const speakText = (text, voiceSettings) => {
   if (!text) return;
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   const voices = window.speechSynthesis.getVoices();
   const gender = voiceSettings?.gender || 'female';
-  
-  let preferred = voices.find(v => 
-    v.lang.includes('en') && v.name.toLowerCase().includes(gender === 'male' ? 'male' : 'female')
-  );
+  let preferred = voices.find(v => v.lang.includes('en') && v.name.toLowerCase().includes(gender));
   if (!preferred) preferred = voices.find(v => v.lang.includes('en'));
-
   u.voice = preferred || voices[0];
   u.rate = voiceSettings?.rate || 1;
   u.pitch = voiceSettings?.pitch || 1;
   window.speechSynthesis.speak(u);
 };
 
-// --- THEMES ---
-const THEMES = {
-  midnight: { name: 'Midnight', bg: 'bg-slate-950', text: 'text-slate-100', accent: 'bg-indigo-600', card: 'bg-slate-900 border-slate-700' },
-  ocean: { name: 'Ocean', bg: 'bg-blue-50', text: 'text-slate-900', accent: 'bg-cyan-700', card: 'bg-white shadow-xl border-blue-100' },
-  forest: { name: 'Forest', bg: 'bg-emerald-50', text: 'text-emerald-950', accent: 'bg-emerald-700', card: 'bg-white shadow-xl border-emerald-100' },
-  sunset: { name: 'Sunset', bg: 'bg-orange-50', text: 'text-stone-900', accent: 'bg-orange-600', card: 'bg-white shadow-xl border-orange-100' },
-  lavender: { name: 'Lavender', bg: 'bg-purple-50', text: 'text-purple-950', accent: 'bg-purple-700', card: 'bg-white shadow-xl border-purple-100' },
-  rose: { name: 'Rose', bg: 'bg-rose-50', text: 'text-rose-950', accent: 'bg-rose-600', card: 'bg-white shadow-xl border-rose-100' },
-  coffee: { name: 'Coffee', bg: 'bg-stone-100', text: 'text-stone-800', accent: 'bg-stone-600', card: 'bg-[#e8e4dc]' },
-  minimal: { name: 'Luxe', bg: 'bg-neutral-100', text: 'text-black', accent: 'bg-black', card: 'bg-white shadow-sm border-gray-200' }
-};
-
-// --- COMPONENTS ---
-
-const DrawingCanvas = ({ color, strokeWidth, onSave }) => {
-  const canvasRef = useRef(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const contextRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = color;
-    ctx.lineWidth = strokeWidth;
-    contextRef.current = ctx;
-  }, []);
-
-  useEffect(() => {
-    if (contextRef.current) {
-      contextRef.current.strokeStyle = color;
-      contextRef.current.lineWidth = strokeWidth;
+const parseVoiceCommandToDate = (text) => {
+    const now = new Date();
+    const cleanText = text.toLowerCase();
+    
+    if (cleanText.includes('tomorrow')) {
+        const d = new Date(now); d.setDate(d.getDate() + 1); return d;
     }
-  }, [color, strokeWidth]);
+    if (cleanText.includes('today')) return now;
 
-  const start = (e) => { 
-      e.preventDefault(); 
-      const rect = canvasRef.current.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      contextRef.current.beginPath(); 
-      contextRef.current.moveTo(clientX - rect.left, clientY - rect.top); 
-      setIsDrawing(true); 
-  };
-  
-  const move = (e) => { 
-      e.preventDefault(); 
-      if(!isDrawing) return; 
-      const rect = canvasRef.current.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      contextRef.current.lineTo(clientX - rect.left, clientY - rect.top); 
-      contextRef.current.stroke(); 
-  };
-  
-  const stop = () => { contextRef.current.closePath(); setIsDrawing(false); if(onSave) onSave(canvasRef.current.toDataURL()); };
-  const clear = () => contextRef.current.clearRect(0,0,canvasRef.current.width, canvasRef.current.height);
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayMatch = days.find(d => cleanText.includes(`next ${d}`));
+    if (dayMatch) {
+        const d = new Date(now);
+        d.setDate(d.getDate() + (7 + days.indexOf(dayMatch) - d.getDay()) % 7 + 7);
+        return d;
+    }
 
-  return (
-    <div className="relative w-full h-80 bg-white rounded-2xl shadow-inner border border-gray-200 overflow-hidden touch-none">
-       <canvas ref={canvasRef} className="w-full h-full cursor-crosshair"
-        onMouseDown={start} onMouseMove={move} onMouseUp={stop} onMouseLeave={stop}
-        onTouchStart={start} onTouchMove={move} onTouchEnd={stop} />
-      <button onClick={clear} className="absolute top-3 right-3 p-2 bg-red-50 text-red-500 rounded-full hover:bg-red-100 transition shadow-sm"><Trash2 size={16} /></button>
-    </div>
-  );
+    const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec','january','february','march','april','may','june','july','august','september','october','november','december'];
+    const dateRegex = new RegExp(`(${months.join('|')})\\s+(\\d{1,2})(st|nd|rd|th)?`, 'i');
+    const match = cleanText.match(dateRegex);
+    if (match) {
+        const monthIndex = months.findIndex(m => m.startsWith(match[1].substring(0,3).toLowerCase())) % 12;
+        const dayNum = parseInt(match[2]);
+        let year = now.getFullYear();
+        if (monthIndex < now.getMonth()) year++; 
+        return new Date(year, monthIndex, dayNum);
+    }
+    return null;
 };
 
-// --- MAIN APP ---
+// --- APP COMPONENT ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [familyId, setFamilyId] = useState(null);
   const [members, setMembers] = useState([]);
-  const [currentMember, setCurrentMember] = useState(null); // The active profile
+  const [currentMember, setCurrentMember] = useState(null); 
+  const [events, setEvents] = useState([]); 
   const [loading, setLoading] = useState(true);
-  
-  // App View State
-  const [view, setView] = useState('profiles'); // profiles, home, notes, planner, settings
+  const [view, setView] = useState('auth'); 
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
-  const audioRef = useRef(null);
-
-  // Auth Inputs
+  const [alertedEvents, setAlertedEvents] = useState(new Set()); 
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [licenseKey, setLicenseKey] = useState('');
   const [authError, setAuthError] = useState('');
   const [isLogin, setIsLogin] = useState(true);
+  const audioRef = useRef(null);
 
   useEffect(() => { if (audioRef.current) audioRef.current.volume = 0.15; }, []);
 
-  // 1. Auth Listener
+  // --- AUTH & FAMILY CHECK ---
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        setFamilyId(currentUser.uid); // Family ID = Admin User ID
-        
-        // Check License & Load Members
-        const userRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'settings', 'account');
-        const snap = await getDoc(userRef);
-        
-        if (snap.exists() && snap.data().licenseValid) {
-            // Load Family Members
-            const memRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'members');
-            const memSnap = await getDocs(memRef);
-            const memList = memSnap.docs.map(d => ({id: d.id, ...d.data()}));
-            setMembers(memList);
-            setView('profiles');
+    const initAuth = async () => { try { if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token); } catch (e) {} };
+    initAuth();
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        setUser(u); 
+        const settingsSnap = await getDoc(doc(db, 'artifacts', appId, 'users', u.uid, 'settings', 'config'));
+        if (settingsSnap.exists() && settingsSnap.data().familyId) {
+            setFamilyId(settingsSnap.data().familyId);
+            const membersQuery = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), where('familyId', '==', settingsSnap.data().familyId));
+            const snap = await getDocs(membersQuery);
+            if (!snap.empty) { 
+                setMembers(snap.docs.map(d=>({id:d.id,...d.data()}))); 
+                setView('profiles'); 
+            } else {
+                setView('setup_family'); 
+            }
         } else {
-            setView('license'); // Needs License
+            setView('setup_family');
         }
-      } else {
-        setUser(null);
-        setView('auth');
+      } else { 
+        setUser(null); 
+        setView('auth'); 
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
-  // 2. Alarm System (Global) - Checks every 30 seconds
+  // --- EVENTS LISTENER ---
   useEffect(() => {
-    if (!currentMember || !familyId) return;
-    
-    const interval = setInterval(async () => {
+    if (!familyId) return;
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.EVENTS), where('familyId', '==', familyId));
+    return onSnapshot(q, snap => {
+        const evs = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        setEvents(evs.sort((a,b) => a.startTime - b.startTime));
+    });
+  }, [familyId]);
+
+  // --- ALARM SYSTEM ---
+  useEffect(() => {
+    if (!currentMember || events.length === 0) return;
+
+    const checkAlarms = () => {
         const now = new Date();
-        // Format current time as HH:MM
-        const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
-        
-        // Find events for TODAY
-        const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
-        const endOfDay = new Date(); endOfDay.setHours(23,59,59,999);
-        
-        const q = query(
-            collection(db, 'artifacts', appId, 'users', familyId, 'events'),
-            where('startTime', '>=', startOfDay.getTime()),
-            where('startTime', '<=', endOfDay.getTime())
-        );
-        
-        const snap = await getDocs(q);
-        snap.forEach(async (docSnap) => {
-            const event = docSnap.data();
-            const eventDate = new Date(event.startTime);
-            const eventTimeStr = eventDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
-            
-            // If time matches and not already alerted
-            if (eventTimeStr === timeString && !event.alerted) {
-                // Determine if this alarm is for the current user
-                if (event.memberId === 'all' || event.memberId === currentMember.id) {
-                    const msg = `Attention ${currentMember.name}. You have ${event.title} starting now.`;
-                    speakText(msg, currentMember.voiceSettings);
-                    
-                    // Mark as alerted in DB to prevent repeat
-                    await updateDoc(doc(db, 'artifacts', appId, 'users', familyId, 'events', docSnap.id), { alerted: true });
+        const currentHours = now.getHours();
+        const currentMinutes = now.getMinutes();
+
+        events.forEach(ev => {
+            const evDate = new Date(ev.startTime);
+            if (evDate.getDate() === now.getDate() &&
+                evDate.getMonth() === now.getMonth() &&
+                evDate.getFullYear() === now.getFullYear() &&
+                evDate.getHours() === currentHours &&
+                evDate.getMinutes() === currentMinutes) {
+                
+                const alertKey = `${ev.id}-${currentHours}:${currentMinutes}`;
+                if (!alertedEvents.has(alertKey)) {
+                    let prefix = "";
+                    if (ev.memberId === 'all') prefix = "Attention everyone, ";
+                    else prefix = `${ev.memberName}, `;
+                    const message = `${prefix} it is time for ${ev.title}.`;
+                    speakText(message, currentMember.voiceSettings);
+                    setAlertedEvents(prev => new Set(prev).add(alertKey));
                 }
             }
         });
-    }, 30000); // Check every 30 seconds
+    };
 
-    return () => clearInterval(interval);
-  }, [currentMember, familyId]);
+    const intervalId = setInterval(checkAlarms, 30000); // Check every 30 seconds
+    return () => clearInterval(intervalId);
+  }, [events, currentMember, alertedEvents]);
 
-  const toggleMusic = () => {
-    if (audioRef.current) {
-      if (isPlayingMusic) audioRef.current.pause();
-      else audioRef.current.play().catch(console.error);
-      setIsPlayingMusic(!isPlayingMusic);
-    }
+  const handleAuth = async (e) => { e.preventDefault(); try { if (isLogin) await signInWithEmailAndPassword(auth, email, password); else await createUserWithEmailAndPassword(auth, email, password); } catch (e) { setAuthError(e.message); } };
+
+  // Generate a random 6-character code
+  const generateFamilyCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
   };
 
-  // --- ACTIONS ---
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    try {
-      if (isLogin) await signInWithEmailAndPassword(auth, email, password);
-      else {
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        // Create Admin Profile (Dad/Parent)
-        const adminMember = {
-            name: 'Dad', role: 'parent', theme: 'midnight', contentPref: 'inspiration',
-            voiceSettings: { gender: 'male', rate: 1, pitch: 1 },
-            avatar: '👨'
-        };
-        await setDoc(doc(db, 'artifacts', appId, 'users', cred.user.uid, 'settings', 'account'), {
-          email, licenseValid: false, createdAt: new Date()
-        });
-        // Add initial member
-        await addDoc(collection(db, 'artifacts', appId, 'users', cred.user.uid, 'members'), adminMember);
-      }
-    } catch (err) { 
-        if (err.code === 'auth/operation-not-allowed') {
-            try {
-               const anon = await signInAnonymously(auth);
-               // Create Admin Profile (Dad/Parent) for Guest
-                const adminMember = {
-                    name: 'Dad', role: 'parent', theme: 'midnight', contentPref: 'inspiration',
-                    voiceSettings: { gender: 'male', rate: 1, pitch: 1 },
-                    avatar: '👨'
-                };
-                await setDoc(doc(db, 'artifacts', appId, 'users', anon.user.uid, 'settings', 'account'), {
-                  email: 'guest@demo.com', licenseValid: false, createdAt: new Date()
-                });
-                await addDoc(collection(db, 'artifacts', appId, 'users', anon.user.uid, 'members'), adminMember);
-            } catch (e) { setAuthError("Login failed."); }
-        } else {
-            setAuthError(err.message.replace('Firebase: ', '')); 
-        }
-    }
-  };
-
-  const redeemLicense = async () => {
-    if (licenseKey === 'PRO-2026-DEMO') {
-      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'account'), { licenseValid: true });
-      window.location.reload(); 
-    } else {
-      setAuthError('Invalid Key. Try PRO-2026-DEMO');
-    }
-  };
-
-  const createMember = async (name, role, theme, avatar) => {
-      if (members.length >= 8) return alert("Family limit reached (Max 8)");
-      const newMem = {
-          name, role, theme, avatar,
-          contentPref: 'inspiration',
-          voiceSettings: { gender: role === 'parent' ? 'female' : 'female', rate: 1, pitch: 1 }
-      };
-      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), newMem);
+  const handleFamilySetup = async (mode, code) => {
+      // Use random code for creation, or user provided code for joining
+      const fid = mode === 'create' ? generateFamilyCode() : code.toUpperCase().trim();
       
-      const memRef = collection(db, 'artifacts', appId, 'users', user.uid, 'members');
-      const memSnap = await getDocs(memRef);
-      setMembers(memSnap.docs.map(d => ({id: d.id, ...d.data()})));
+      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'config'), { familyId: fid, joinedAt: Date.now() });
+      setFamilyId(fid);
+      
+      if (mode === 'create') {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), { 
+            familyId: fid,
+            name: 'Admin', role: 'parent', gender: 'female', theme: 'ocean', contentPref: 'inspiration', 
+            voiceSettings: { gender: 'female', rate: 1, pitch: 1 }, avatar: '👑',
+            createdBy: user.uid
+        });
+      }
+      
+      const membersQuery = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), where('familyId', '==', fid));
+      const snap = await getDocs(membersQuery);
+      setMembers(snap.docs.map(d=>({id:d.id, ...d.data()})));
+      setView('profiles');
   };
 
-  const selectProfile = (member) => {
-      setCurrentMember(member);
-      setView('home');
+  const createMember = async (name, role, gender, theme, avatar) => {
+      if (members.length >= 6) return; 
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), { 
+          familyId, name, role, gender, theme, avatar, contentPref: 'inspiration', voiceSettings: { gender, rate: 1, pitch: 1 } 
+      });
+      const membersQuery = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), where('familyId', '==', familyId));
+      const snap = await getDocs(membersQuery);
+      setMembers(snap.docs.map(d=>({id:d.id, ...d.data()})));
   };
 
-  // --- RENDER ---
-  if (loading) return <div className="h-screen flex items-center justify-center"><Loader className="animate-spin"/></div>;
+  const toggleMusic = () => { if (audioRef.current) { isPlayingMusic?audioRef.current.pause():audioRef.current.play(); setIsPlayingMusic(!isPlayingMusic); }};
 
-  if (!user || view === 'auth') return <AuthScreen email={email} setEmail={setEmail} password={password} setPassword={setPassword} isLogin={isLogin} setIsLogin={setIsLogin} handleAuth={handleAuth} error={authError} />;
+  if (loading) return <div className="h-screen flex items-center justify-center"><Loader className="animate-spin text-blue-500"/></div>;
   
-  if (view === 'license') return <LicenseScreen licenseKey={licenseKey} setLicenseKey={setLicenseKey} redeemLicense={redeemLicense} error={authError} signOut={()=>signOut(auth)}/>;
+  if (!user || view === 'auth') return <AuthScreen email={email} setEmail={setEmail} password={password} setPassword={setPassword} isLogin={isLogin} setIsLogin={setIsLogin} handleAuth={handleAuth} handleGuestLogin={async()=>{ try{const a=await signInAnonymously(auth); setUser(a.user);}catch(e){}}} error={authError}/>;
+  
+  if (view === 'setup_family') return <FamilySetupScreen onSetup={handleFamilySetup} signOut={()=>signOut(auth)} />;
 
-  if (view === 'profiles' || !currentMember) return <ProfileSelector members={members} onSelect={selectProfile} onCreate={createMember} signOut={()=>signOut(auth)} />;
+  if (view === 'profiles') return <ProfileSelector members={members} onSelect={m=>{setCurrentMember(m); setView('home');}} onCreate={createMember} signOut={()=>signOut(auth)}/>;
 
   const theme = THEMES[currentMember.theme || 'ocean'];
-  const fontClass = currentMember.role === 'child' ? { fontFamily: '"Comic Neue", cursive' } : { fontFamily: '"Inter", sans-serif' };
 
   return (
-    <div className={`min-h-screen transition-all duration-700 ${theme.bg} ${theme.text}`} style={fontClass}>
-      <audio ref={audioRef} loop src="[https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112762.mp3](https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112762.mp3)" />
-
-      {/* Header */}
-      <header className={`px-6 py-4 sticky top-0 z-20 flex justify-between items-center backdrop-blur-md bg-opacity-95 border-b border-gray-100/10`}>
-        <div className="flex items-center gap-2" onClick={() => setView('profiles')}>
-            <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center text-lg shadow-sm border border-white/30 cursor-pointer">
-                {currentMember.avatar || '👤'}
-            </div>
-            <div>
-                <h1 className="text-sm font-bold leading-none">{currentMember.name}'s Planner</h1>
-                <p className="text-[10px] opacity-70">Tap to switch profile</p>
-            </div>
+    <div className={`min-h-screen transition-colors duration-500 ${theme.bg} ${theme.text}`} style={{fontFamily: currentMember.role==='child'?'"Comic Neue",cursive':'"Inter",sans-serif'}}>
+      <audio ref={audioRef} loop src="https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112762.mp3" />
+      <header className={`px-4 py-3 sticky top-0 z-30 flex justify-between items-center backdrop-blur-xl bg-opacity-90 border-b border-black/5 ${theme.bg}`}>
+        <div className="flex items-center gap-3" onClick={() => setView('profiles')}>
+            <div className={`h-10 w-10 rounded-full flex items-center justify-center text-xl shadow-md border-2 border-white/40 ${theme.accent} text-white`}>{currentMember.avatar}</div>
+            <div><h1 className="text-base font-bold leading-tight">{currentMember.name}</h1></div>
         </div>
-        <button onClick={toggleMusic} className={`p-2.5 rounded-full backdrop-blur-md bg-white/20 hover:bg-white/30 transition shadow-sm border border-white/20`}>
-            {isPlayingMusic ? <Volume2 size={18} /> : <VolumeX size={18} />}
-        </button>
+        <button onClick={toggleMusic} className={`p-2 rounded-full ${theme.card} border border-black/5`}>{isPlayingMusic ? <Volume2 size={20} className={theme.accent.replace('bg-', 'text-')} /> : <VolumeX size={20} className="opacity-40" />}</button>
       </header>
-
-      {/* Main Content */}
-      <main className="p-4 pb-28 max-w-lg mx-auto w-full">
-        {view === 'home' && <Dashboard member={currentMember} theme={theme} />}
+      <main className="p-4 pb-32 max-w-xl mx-auto w-full min-h-[85vh]">
+        {view === 'home' && <Dashboard member={currentMember} events={events} theme={theme} setView={setView} />}
         {view === 'notes' && <NotesManager member={currentMember} familyId={familyId} db={db} appId={appId} theme={theme} />}
-        {view === 'planner' && <FamilyCalendar member={currentMember} members={members} familyId={familyId} db={db} appId={appId} theme={theme} />}
-        {view === 'settings' && <SettingsScreen member={currentMember} familyId={familyId} db={db} appId={appId} theme={theme} onUpdate={setCurrentMember} />}
+        {view === 'planner' && <FamilyCalendar member={currentMember} members={members} events={events} familyId={familyId} db={db} appId={appId} theme={theme} />}
+        {view === 'settings' && <SettingsScreen member={currentMember} members={members} familyId={familyId} db={db} appId={appId} theme={theme} onUpdate={setCurrentMember} onCreate={createMember} />}
       </main>
-
-      {/* Navigation */}
-      <nav className={`fixed bottom-6 left-4 right-4 max-w-lg mx-auto ${theme.card} border rounded-2xl px-2 py-2 flex justify-around items-center shadow-2xl shadow-black/5 z-30`}>
-        {[
-          { id: 'home', icon: Home, label: 'Home' },
-          { id: 'notes', icon: PenTool, label: 'Notes' },
-          { id: 'planner', icon: CalendarIcon, label: 'Calendar' },
-          { id: 'settings', icon: Settings, label: 'Settings' }
-        ].map(item => (
-          <button key={item.id} onClick={() => setView(item.id)} className={`relative px-6 py-3 rounded-xl transition-all duration-300 ${view === item.id ? `${theme.accent} text-white shadow-lg scale-105` : 'opacity-60 hover:opacity-100 hover:bg-gray-50/10'}`}>
-            <item.icon size={22} strokeWidth={2.5} />
-            {view === item.id && <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-[10px] font-bold opacity-0 animate-fade-in">{item.label}</span>}
-          </button>
-        ))}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 p-4">
+        <div className={`max-w-xl mx-auto ${theme.card} border rounded-2xl p-2 flex justify-between shadow-2xl backdrop-blur-xl`}>
+            {[{id:'home',icon:Home},{id:'notes',icon:PenTool},{id:'planner',icon:CalendarIcon},{id:'settings',icon:Settings}].map(i=>(
+                <button key={i.id} onClick={()=>setView(i.id)} className={`flex-1 flex flex-col items-center py-3 rounded-xl transition-all ${view===i.id?'':'opacity-60'}`}>
+                    <div className={`p-1.5 rounded-lg ${view===i.id?`${theme.accent} text-white shadow-lg -translate-y-1`:'text-current'}`}><i.icon size={24} strokeWidth={view===i.id?2.5:2}/></div>
+                </button>
+            ))}
+        </div>
       </nav>
     </div>
   );
 }
 
-// --- SUB-SCREENS ---
-
-const AuthScreen = ({email, setEmail, password, setPassword, isLogin, setIsLogin, handleAuth, error}) => (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 to-purple-800 flex items-center justify-center p-6 text-white">
-        <div className="w-full max-w-md bg-white/10 backdrop-blur-xl p-8 rounded-3xl border border-white/20">
-            <h1 className="text-3xl font-bold text-center mb-2">Family Hub 2026</h1>
-            <p className="text-center opacity-70 mb-8">One planner for everyone.</p>
-            {error && <div className="bg-red-500/20 p-3 rounded-lg mb-4 text-sm text-center">{error}</div>}
+// --- AUTH & SETUP SCREENS ---
+const AuthScreen = ({email, setEmail, password, setPassword, isLogin, setIsLogin, handleAuth, handleGuestLogin, error}) => (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 flex items-center justify-center p-6 text-white">
+        <div className="w-full max-w-md bg-white/10 backdrop-blur-2xl p-8 rounded-[2rem] border border-white/10 shadow-2xl">
+            <h1 className="text-3xl font-bold text-center mb-8">Family Hub</h1>
+            {error && <div className="bg-red-500/20 p-4 rounded-xl mb-4 text-center text-sm">{error}</div>}
             <form onSubmit={handleAuth} className="space-y-4">
-                <input type="email" placeholder="Family Email" required className="w-full p-4 bg-black/20 rounded-xl border border-white/10 focus:border-white/50 outline-none text-white placeholder-white/30" value={email} onChange={e=>setEmail(e.target.value)}/>
-                <input type="password" placeholder="Password" required className="w-full p-4 bg-black/20 rounded-xl border border-white/10 focus:border-white/50 outline-none text-white placeholder-white/30" value={password} onChange={e=>setPassword(e.target.value)}/>
-                <button type="submit" className="w-full bg-white text-indigo-900 py-4 rounded-xl font-bold hover:bg-opacity-90 transition">{isLogin ? 'Enter Hub' : 'Create Family Account'}</button>
+                <input className="w-full p-4 bg-black/20 rounded-xl border border-white/10 text-white placeholder-white/50" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/>
+                <input className="w-full p-4 bg-black/20 rounded-xl border border-white/10 text-white placeholder-white/50" type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)}/>
+                <button className="w-full bg-white text-indigo-900 py-4 rounded-xl font-bold shadow-lg mt-4">{isLogin?'Enter':'Create Account'}</button>
             </form>
-            <button onClick={()=>setIsLogin(!isLogin)} className="w-full mt-4 text-sm opacity-50 hover:opacity-100">{isLogin ? "New Family? Start here" : "Have an account? Log in"}</button>
+            <button onClick={handleGuestLogin} className="w-full mt-4 py-3 border border-white/20 rounded-xl text-sm font-bold">Guest Mode</button>
+            <button onClick={()=>setIsLogin(!isLogin)} className="w-full mt-4 text-xs opacity-60 hover:opacity-100">{isLogin?"New? Create Account":"Login"}</button>
         </div>
     </div>
 );
 
-const LicenseScreen = ({licenseKey, setLicenseKey, redeemLicense, error, signOut}) => (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl">
-            <h2 className="text-2xl font-bold text-center mb-6">Activate Family Plan</h2>
-            {error && <div className="text-red-500 text-sm text-center mb-4">{error}</div>}
-            <input type="text" placeholder="License Key (e.g. PRO-2026-DEMO)" className="w-full p-4 bg-gray-100 rounded-xl mb-4 text-center tracking-widest uppercase font-bold" value={licenseKey} onChange={e=>setLicenseKey(e.target.value)}/>
-            <button onClick={redeemLicense} className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold">Activate</button>
-            <button onClick={signOut} className="w-full mt-4 text-gray-400">Sign Out</button>
-        </div>
-    </div>
-);
-
-const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
-    const [isAdding, setIsAdding] = useState(false);
-    const [newName, setNewName] = useState('');
-    const [newRole, setNewRole] = useState('child');
-    const [newTheme, setNewTheme] = useState('ocean');
-
-    const handleCreate = () => {
-        if(!newName) return;
-        const avatar = newRole === 'parent' ? (Math.random() > 0.5 ? '👨' : '👩') : (Math.random() > 0.5 ? '👦' : '👧');
-        onCreate(newName, newRole, newTheme, avatar);
-        setIsAdding(false);
-        setNewName('');
-    };
+const FamilySetupScreen = ({ onSetup, signOut }) => {
+    const [mode, setMode] = useState(null); // 'create' or 'join'
+    const [code, setCode] = useState('');
 
     return (
         <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
-            <h1 className="text-3xl font-bold mb-10">Who is using the planner?</h1>
-            
-            <div className="grid grid-cols-2 gap-6 w-full max-w-md">
-                {members.map(m => (
-                    <button key={m.id} onClick={()=>onSelect(m)} className="flex flex-col items-center gap-3 group">
-                        <div className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${m.theme === 'midnight' ? 'from-slate-700 to-slate-900' : m.theme === 'ocean' ? 'from-cyan-400 to-blue-500' : 'from-pink-400 to-rose-500'} flex items-center justify-center text-4xl shadow-lg group-hover:scale-105 transition border-2 border-transparent group-hover:border-white`}>
-                            {m.avatar}
-                        </div>
-                        <span className="font-bold text-lg">{m.name}</span>
-                    </button>
-                ))}
-                
-                {members.length < 8 && (
-                    <button onClick={()=>setIsAdding(true)} className="flex flex-col items-center gap-3 group opacity-70 hover:opacity-100">
-                        <div className="w-24 h-24 rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center text-3xl group-hover:border-white transition">
-                            <UserPlus />
-                        </div>
-                        <span className="font-medium">Add Member</span>
-                    </button>
+            <div className="w-full max-w-md text-center">
+                <h1 className="text-3xl font-bold mb-2">Welcome!</h1>
+                <p className="text-white/60 mb-8">Connect to your family calendar.</p>
+                {!mode ? (
+                    <div className="space-y-4">
+                        <button onClick={()=>onSetup('create')} className="w-full p-6 bg-indigo-600 rounded-2xl font-bold text-lg hover:bg-indigo-500 transition shadow-lg flex flex-col items-center gap-2">
+                            <Home size={32}/>
+                            Start New Family
+                        </button>
+                        <button onClick={()=>setMode('join')} className="w-full p-6 bg-white/10 rounded-2xl font-bold text-lg hover:bg-white/20 transition border border-white/5 flex flex-col items-center gap-2">
+                            <Users size={32}/>
+                            Join Existing Family
+                        </button>
+                    </div>
+                ) : (
+                    <div className="bg-white/10 p-8 rounded-2xl border border-white/10">
+                        <h2 className="text-xl font-bold mb-4">Enter Family Code</h2>
+                        <input className="w-full p-4 bg-black/30 rounded-xl text-center text-2xl tracking-widest font-mono mb-4 border border-white/20" placeholder="6-DIGIT CODE" value={code} onChange={e=>setCode(e.target.value.toUpperCase())} maxLength={6} />
+                        <button onClick={()=>onSetup('join', code)} disabled={code.length < 6} className="w-full bg-white text-indigo-900 py-4 rounded-xl font-bold disabled:opacity-50">Join Family</button>
+                        <button onClick={()=>setMode(null)} className="mt-4 text-sm opacity-60">Back</button>
+                    </div>
+                )}
+                <button onClick={signOut} className="mt-12 text-sm opacity-40 hover:opacity-100 flex items-center justify-center gap-2 w-full"><LogOut size={16}/> Sign Out</button>
+            </div>
+        </div>
+    );
+};
+
+const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
+    const [add, setAdd] = useState(false);
+    const [name, setName] = useState('');
+    const [role, setRole] = useState('child');
+    const [gender, setGender] = useState('female');
+    const handle = () => {
+        if(!name) return;
+        const av = role==='parent' ? (gender==='male'?'👨':'👩') : (gender==='male'?'👦':'👧');
+        onCreate(name, role, gender, 'ocean', av);
+        setAdd(false); setName('');
+    };
+    return (
+        <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
+            <div className="w-full max-w-md">
+                <h1 className="text-3xl font-bold text-center mb-8">Who's here?</h1>
+                <div className="grid grid-cols-2 gap-4">
+                    {members.map(m => (
+                        <button key={m.id} onClick={()=>onSelect(m)} className="flex flex-col items-center gap-2 p-6 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/5 transition">
+                            <div className="text-5xl mb-2">{m.avatar}</div>
+                            <span className="font-bold text-lg">{m.name}</span>
+                        </button>
+                    ))}
+                    {members.length < 6 && <button onClick={()=>setAdd(true)} className="flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/40 transition"><UserPlus size={40}/><span className="font-bold">Add</span></button>}
+                </div>
+                <button onClick={signOut} className="mt-12 w-full py-4 text-white/40 hover:text-white flex justify-center gap-2"><LogOut size={18}/> Log Out</button>
+            </div>
+            {add && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50">
+                    <div className="bg-slate-800 p-8 rounded-3xl w-full max-w-sm">
+                        <h3 className="text-xl font-bold mb-6">New Profile</h3>
+                        <input className="w-full p-4 mb-4 bg-black/30 rounded-xl text-white" placeholder="Name" value={name} onChange={e=>setName(e.target.value)}/>
+                        <div className="flex gap-2 mb-4"><button onClick={()=>setRole('parent')} className={`flex-1 p-3 rounded-lg font-bold ${role==='parent'?'bg-indigo-600':'bg-slate-700'}`}>Parent</button><button onClick={()=>setRole('child')} className={`flex-1 p-3 rounded-lg font-bold ${role==='child'?'bg-indigo-600':'bg-slate-700'}`}>Child</button></div>
+                        <div className="flex gap-2 mb-6"><button onClick={()=>setGender('male')} className={`flex-1 p-3 rounded-lg font-bold ${gender==='male'?'bg-blue-600':'bg-slate-700'}`}>Boy</button><button onClick={()=>setGender('female')} className={`flex-1 p-3 rounded-lg font-bold ${gender==='female'?'bg-pink-600':'bg-slate-700'}`}>Girl</button></div>
+                        <button onClick={handle} className="w-full bg-white text-slate-900 py-4 rounded-xl font-bold">Create</button>
+                        <button onClick={()=>setAdd(false)} className="w-full mt-4 text-white/50">Cancel</button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const Dashboard = ({ member, events, theme, setView }) => {
+    const today = new Date();
+    // Re-calculating content here ensures dashboard updates immediately when prefs change
+    const content = getContentForDate(today, member.contentPref || 'inspiration');
+    const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    
+    // Filter events for today
+    const todaysEvents = events.filter(ev => {
+        const evDate = new Date(ev.startTime);
+        return evDate.getDate() === today.getDate() && 
+               evDate.getMonth() === today.getMonth() &&
+               evDate.getFullYear() === today.getFullYear();
+    });
+
+    return (
+        <div className="space-y-6 animate-fade-in-up">
+            <div className={`p-6 md:p-8 rounded-[2rem] ${theme.accent} text-white shadow-xl relative overflow-hidden group`}>
+                <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform duration-700"><Heart size={150} fill="currentColor" /></div>
+                <div className="relative z-10">
+                    <p className="opacity-90 text-xs font-bold uppercase tracking-widest mb-1">{dateStr}</p>
+                    <h2 className="text-2xl md:text-4xl font-bold">Hi, {member.name}!</h2>
+                    <div className="bg-white/15 backdrop-blur-md p-5 rounded-2xl border border-white/20 shadow-inner">
+                        <div className="flex justify-between items-start gap-4 mb-3"><span className="text-[10px] uppercase tracking-wider font-bold opacity-80 flex items-center gap-1.5 bg-black/20 px-2 py-1 rounded-full">{member.contentPref === 'bible' ? <><BookOpen size={10}/> Verse</> : <><Heart size={10}/> Quote</>}</span><button onClick={() => speakText(content, member.voiceSettings)} className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition active:scale-95"><Volume2 size={16} /></button></div>
+                        <p className={`text-sm md:text-base leading-relaxed opacity-95 ${member.role==='child' ? 'font-comic' : 'font-serif italic'}`}>"{content}"</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* FAMILY DASHBOARD - AT A GLANCE */}
+            <div className="space-y-3">
+                <h3 className="text-lg font-bold px-2 opacity-80 flex items-center gap-2"><Clock size={18}/> Today's Schedule</h3>
+                {todaysEvents.length === 0 ? (
+                    <div className={`${theme.card} p-6 rounded-[2rem] border border-dashed border-gray-300 flex flex-col items-center justify-center text-center opacity-50`}>
+                        <div className="mb-2 bg-black/5 p-3 rounded-full"><Sun size={24}/></div>
+                        <p className="text-sm font-bold">Nothing scheduled for today!</p>
+                        <p className="text-xs">Enjoy your free time.</p>
+                    </div>
+                ) : (
+                    <div className={`${theme.card} rounded-[2rem] border overflow-hidden shadow-sm`}>
+                        {todaysEvents.map((ev, idx) => {
+                             const Icon = EVENT_ICONS.find(i => i.id === ev.icon)?.icon || Clock;
+                             return (
+                                <div key={ev.id} className={`flex items-center gap-4 p-4 ${idx !== todaysEvents.length-1 ? 'border-b border-black/5' : ''}`}>
+                                    <div className="text-center w-12">
+                                        <div className="text-xs font-bold opacity-50">{new Date(ev.startTime).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'}).split(' ')[1]}</div>
+                                        <div className="text-lg font-bold leading-none">{new Date(ev.startTime).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'}).split(' ')[0]}</div>
+                                    </div>
+                                    <div className={`p-3 rounded-2xl ${theme.bg} text-current`}>
+                                        <Icon size={20} className={theme.subtext}/>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="font-bold truncate">{ev.title}</h4>
+                                        <div className="flex items-center gap-2 text-xs opacity-60">
+                                            <span className="bg-black/5 px-2 py-0.5 rounded-md truncate max-w-[100px]">{ev.memberName}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                             )
+                        })}
+                    </div>
                 )}
             </div>
 
-            {isAdding && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50">
-                    <div className="bg-slate-800 p-6 rounded-3xl w-full max-w-sm border border-slate-700">
-                        <h3 className="text-xl font-bold mb-4">New Family Member</h3>
-                        <div className="space-y-4">
-                            <input className="w-full p-3 rounded-xl bg-black/30 border border-slate-600 text-white" placeholder="Name" value={newName} onChange={e=>setNewName(e.target.value)}/>
+            <div className="grid grid-cols-2 gap-4">
+                <button onClick={() => setView('planner')} className={`${theme.card} p-5 rounded-[2rem] border flex flex-col items-center justify-center gap-3 h-32 hover:scale-[1.02] transition-all duration-300 group`}>
+                    <div className={`p-3 rounded-full ${theme.bg} ${theme.text} group-hover:bg-opacity-80`}><CalendarIcon size={24} strokeWidth={1.5}/></div>
+                    <span className="font-bold text-sm opacity-80">Full Calendar</span>
+                </button>
+                <button onClick={() => setView('notes')} className={`${theme.card} p-5 rounded-[2rem] border flex flex-col items-center justify-center gap-3 h-32 hover:scale-[1.02] transition-all duration-300 group`}>
+                    <div className={`p-3 rounded-full ${theme.bg} ${theme.text} group-hover:bg-opacity-80`}><PenTool size={24} strokeWidth={1.5}/></div>
+                    <span className="font-bold text-sm opacity-80">My Notes</span>
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const FamilyCalendar = ({ member, members, events, familyId, db, appId, theme }) => {
+    const [currentDate, setCurrentDate] = useState(() => {
+        const now = new Date();
+        if (now.getFullYear() < 2025 || (now.getFullYear() === 2025 && now.getMonth() < 11)) return new Date(2025, 11, 1);
+        return now;
+    });
+    // events passed from parent now
+    const [selectedAssignee, setSelectedAssignee] = useState(member.id); 
+    const [showModal, setShowModal] = useState(false);
+    const [selectedDate, setSelectedDate] = useState(null);
+    const [newEventTitle, setNewEventTitle] = useState('');
+    const [newEventIcon, setNewEventIcon] = useState('default');
+    const [newEventTime, setNewEventTime] = useState('12:00');
+    const [isHandsFree, setIsHandsFree] = useState(false);
+    const [isListening, setIsListening] = useState(false);
+    const [isMicActive, setIsMicActive] = useState(false); 
+    const recognition = useRef(null);
+
+    // --- VOICE LOGIC ---
+    const stateRef = useRef({ newEventTitle, selectedDate, showModal });
+    useEffect(() => {
+        stateRef.current = { newEventTitle, selectedDate, showModal };
+    }, [newEventTitle, selectedDate, showModal]);
+
+    const handleSaveFromVoice = async () => {
+        const { newEventTitle, selectedDate } = stateRef.current;
+        if (!newEventTitle || !selectedDate) return; 
+        
+        const titleToSave = newEventTitle || "Voice Event";
+        const [hours, mins] = newEventTime.split(':');
+        const eventDateTime = new Date(selectedDate);
+        eventDateTime.setHours(parseInt(hours), parseInt(mins), 0, 0);
+
+        const assignedMember = members.find(m => m.id === selectedAssignee);
+        const memberName = selectedAssignee === 'all' ? 'Everyone' : (assignedMember ? assignedMember.name : 'Unknown');
+
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.EVENTS), {
+            familyId, title: titleToSave, startTime: eventDateTime.getTime(), memberId: selectedAssignee, memberName, icon: newEventIcon, createdAt: Date.now()
+        });
+        setNewEventTitle('');
+    };
+
+    // Specific dictation for the input field (Mic Button)
+    const startDictation = () => {
+        if (isHandsFree) setIsHandsFree(false); 
+        if (recognition.current) recognition.current.stop();
+
+        const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
+        if (!SR) return;
+        
+        const dictation = new SR();
+        dictation.lang = 'en-US';
+        dictation.continuous = false;
+        dictation.interimResults = false;
+
+        dictation.onstart = () => setIsMicActive(true);
+        dictation.onend = () => setIsMicActive(false);
+        dictation.onresult = (e) => {
+            const text = e.results[0][0].transcript;
+            setNewEventTitle(text);
+        };
+        dictation.start();
+    };
+
+    // Global Hands-free logic
+    useEffect(() => {
+        if (window.webkitSpeechRecognition || window.SpeechRecognition) {
+            const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
+            recognition.current = new SR();
+            recognition.current.continuous = false;
+            recognition.current.lang = 'en-US';
+            recognition.current.onstart = () => setIsListening(true);
+            recognition.current.onresult = (e) => {
+                const text = e.results[0][0].transcript;
+                const lower = text.toLowerCase();
+                if (lower.includes('save') || lower.includes('add event')) { 
+                    handleSaveFromVoice(); 
+                } else { 
+                    const parsed = parseVoiceCommandToDate(text);
+                    if(parsed) {
+                        setSelectedDate(parsed);
+                        setShowModal(true);
+                        setNewEventTitle(''); 
+                    } else {
+                        // Only update title if modal is open to avoid ghosts
+                        if (stateRef.current.showModal) setNewEventTitle(text); 
+                    }
+                }
+            };
+            recognition.current.onend = () => {
+                setIsListening(false);
+                if (isHandsFree) {
+                    try { recognition.current.start(); } catch(e){}
+                } 
+            };
+            recognition.current.onerror = (e) => {
+                setIsListening(false);
+                if (isHandsFree && e.error !== 'not-allowed' && e.error !== 'aborted') {
+                    setTimeout(() => { try { recognition.current.start(); } catch(e){} }, 1000); 
+                }
+            };
+        }
+    }, [isHandsFree]); 
+
+    const toggleHandsFree = () => {
+        if (isHandsFree) { setIsHandsFree(false); try{recognition.current?.stop();}catch(e){} } 
+        else { setIsHandsFree(true); try{recognition.current?.start();}catch(e){} }
+    };
+
+    const changeMonth = (offset) => {
+        const newDate = new Date(currentDate);
+        newDate.setMonth(newDate.getMonth() + offset);
+        setCurrentDate(newDate);
+    };
+
+    const getEventsForDay = (day) => {
+        return events.filter(ev => {
+            const evDate = new Date(ev.startTime);
+            return evDate.getDate() === day && evDate.getMonth() === currentDate.getMonth() && evDate.getFullYear() === currentDate.getFullYear() &&
+                (selectedAssignee === 'all' || ev.memberId === selectedAssignee || ev.memberId === 'all');
+        });
+    };
+
+    const handleAddEvent = async () => {
+        if (!newEventTitle || !selectedDate) return;
+        const [hours, mins] = newEventTime.split(':');
+        const eventDateTime = new Date(selectedDate);
+        eventDateTime.setHours(parseInt(hours), parseInt(mins), 0, 0);
+
+        const assignedMember = members.find(m => m.id === selectedAssignee);
+        const memberName = selectedAssignee === 'all' ? 'Everyone' : (assignedMember ? assignedMember.name : 'Unknown');
+
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.EVENTS), {
+            familyId, title: newEventTitle, startTime: eventDateTime.getTime(), memberId: selectedAssignee, memberName, icon: newEventIcon, createdAt: Date.now()
+        });
+        setNewEventTitle('');
+    };
+
+    const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const blanks = Array.from({ length: firstDay }, (_, i) => i);
+    const modalContent = selectedDate ? getContentForDate(selectedDate, member.contentPref || 'inspiration') : '';
+
+    return (
+        <div className="space-y-6 h-full flex flex-col relative">
+            <div className="flex justify-between items-center mb-2">
+                <div><h2 className="text-2xl font-bold leading-none">{currentDate.toLocaleString('default', { month: 'long' })}</h2><p className={`text-sm ${theme.subtext}`}>{currentDate.getFullYear()}</p></div>
+                <div className="flex gap-2 items-center">
+                     <button onClick={toggleHandsFree} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${isHandsFree ? 'bg-red-500 text-white border-red-600 animate-pulse' : 'bg-white text-indigo-600 border-indigo-200'}`}>
+                        {isHandsFree ? <Mic size={14} /> : <MicOff size={14} />} {isHandsFree ? "Hot Mic" : "Hands Free"}
+                    </button>
+                    <button onClick={() => changeMonth(-1)} className={`p-2 rounded-xl ${theme.card} border hover:bg-black/5`}><ChevronLeft size={20}/></button>
+                    <button onClick={() => changeMonth(1)} className={`p-2 rounded-xl ${theme.card} border hover:bg-black/5`}><ChevronRight size={20}/></button>
+                </div>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4">
+                <button onClick={()=>setSelectedAssignee('all')} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition-all ${selectedAssignee==='all' ? theme.accent + ' text-white border-transparent shadow-md' : 'bg-white text-gray-600 border-gray-200'}`}>Everyone</button>
+                {members.map(m => (
+                    <button key={m.id} onClick={()=>setSelectedAssignee(m.id)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border flex items-center gap-1.5 transition-all ${selectedAssignee===m.id ? theme.accent + ' text-white border-transparent shadow-md' : 'bg-white text-gray-600 border-gray-200'}`}><span>{m.avatar}</span> {m.name}</button>
+                ))}
+            </div>
+            <div className={`${theme.card} rounded-[2rem] border overflow-hidden shadow-sm flex-1`}>
+                <div className="grid grid-cols-7 p-4 border-b border-black/5 bg-black/5">{['S','M','T','W','T','F','S'].map((d,i) => <div key={i} className="text-center text-xs font-bold opacity-50">{d}</div>)}</div>
+                <div className="grid grid-cols-7 p-2 bg-white/50 min-h-[300px]">
+                    {blanks.map((_, i) => <div key={`blank-${i}`} className="p-2 h-20 sm:h-24"></div>)}
+                    {days.map(day => {
+                        const dayEvents = getEventsForDay(day);
+                        const isToday = day === new Date().getDate() && currentDate.getMonth() === new Date().getMonth() && currentDate.getFullYear() === new Date().getFullYear();
+                        return (
+                            <div key={`day-${day}`} onClick={() => {setSelectedDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day)); setShowModal(true); setNewEventTitle('');}} className={`relative p-1 h-20 sm:h-24 border border-transparent hover:bg-black/5 hover:border-black/5 rounded-xl cursor-pointer transition-colors flex flex-col items-center justify-start gap-1`}>
+                                <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${isToday ? theme.accent + ' text-white' : 'opacity-70'}`}>{day}</span>
+                                <div className="flex flex-wrap justify-center gap-1 w-full">{dayEvents.slice(0, 3).map((ev) => {const Icon = EVENT_ICONS.find(i => i.id === ev.icon)?.icon || Clock; return (<div key={ev.id} className={`w-1.5 h-1.5 sm:w-4 sm:h-4 rounded-full sm:rounded-md ${theme.accent} sm:bg-opacity-10 sm:text-indigo-600 flex items-center justify-center`}><Icon size={10} className="hidden sm:block"/></div>);})}{dayEvents.length > 3 && <div className="text-[8px] font-bold text-gray-400">+</div>}</div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+            {showModal && selectedDate && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className={`w-full max-w-sm ${theme.card} p-6 rounded-[2rem] shadow-2xl border max-h-[85vh] overflow-y-auto`}>
+                        <div className="flex justify-between items-center mb-4">
+                            <div><h3 className="text-xl font-bold">{selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric'})}</h3><p className={`text-xs ${theme.subtext}`}>Daily Wisdom</p></div>
+                            <button onClick={()=>setShowModal(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={18}/></button>
+                        </div>
+                        <div className={`p-4 rounded-xl ${theme.accent} bg-opacity-10 mb-6 border border-current border-opacity-10`}>
+                            <div className="flex justify-between items-start gap-2 mb-2"><span className={`text-[10px] uppercase font-bold tracking-wider opacity-60`}>{member.contentPref === 'bible' ? 'Verse of the Day' : 'Daily Inspiration'}</span><button onClick={() => speakText(modalContent, member.voiceSettings)} className="opacity-50 hover:opacity-100"><Volume2 size={14}/></button></div>
+                            <p className="text-sm font-medium italic leading-relaxed opacity-90">"{modalContent}"</p>
+                        </div>
+                        <div className="mb-6 space-y-2">
+                            <h4 className="text-xs font-bold uppercase opacity-50 mb-2">Events</h4>
+                            {getEventsForDay(selectedDate.getDate()).length === 0 ? <p className="text-center text-sm opacity-50 py-4 italic border-2 border-dashed border-gray-200 rounded-xl">No events planned.</p> : getEventsForDay(selectedDate.getDate()).map(ev => {const Icon = EVENT_ICONS.find(i => i.id === ev.icon)?.icon || Clock; return (<div key={ev.id} className="flex items-center gap-3 p-3 bg-white/50 rounded-xl border border-black/5"><div className={`p-2 rounded-full ${theme.accent} text-white`}><Icon size={14} /></div><div className="flex-1"><p className="text-sm font-bold leading-tight">{ev.title}</p><p className="text-[10px] opacity-60">{new Date(ev.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p></div><button onClick={(e)=>{e.stopPropagation(); deleteDoc(doc(db,'artifacts',appId,'public','data',COLLECTIONS.EVENTS,ev.id))}} className="text-gray-400 hover:text-red-500"><Trash2 size={16}/></button></div>)})}
+                        </div>
+                        <div className="space-y-4 pt-4 border-t border-black/10">
+                             <div className="relative">
+                                <input autoFocus className="w-full p-3 rounded-xl border outline-none text-sm font-medium bg-white text-black border-gray-200 pr-10" placeholder="Event title..." value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} />
+                                <button onClick={startDictation} className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-all ${isMicActive ? 'bg-red-500 text-white animate-pulse' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'}`}><Mic size={16}/></button>
+                             </div>
                             <div className="flex gap-2">
-                                <button onClick={()=>setNewRole('parent')} className={`flex-1 p-2 rounded-lg ${newRole==='parent'?'bg-indigo-600':'bg-slate-700'}`}>Parent</button>
-                                <button onClick={()=>setNewRole('child')} className={`flex-1 p-2 rounded-lg ${newRole==='child'?'bg-indigo-600':'bg-slate-700'}`}>Child</button>
+                                <input type="time" className="flex-1 p-3 rounded-xl border outline-none text-sm font-medium bg-white text-black border-gray-200" value={newEventTime} onChange={e=>setNewEventTime(e.target.value)} />
+                                <div className="flex bg-gray-100 rounded-xl p-1 gap-1 overflow-x-auto max-w-[150px]">{EVENT_ICONS.slice(1).map(ic => (<button key={ic.id} onClick={() => setNewEventIcon(newEventIcon === ic.id ? 'default' : ic.id)} className={`p-2 rounded-lg transition-all flex-shrink-0 ${newEventIcon === ic.id ? 'bg-white shadow text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`} title={ic.label}><ic.icon size={18} /></button>))}</div>
                             </div>
-                            <div className="grid grid-cols-4 gap-2">
-                                {Object.keys(THEMES).map(t => (
-                                    <button key={t} onClick={()=>setNewTheme(t)} className={`h-8 rounded-full bg-${t==='midnight'?'slate-900':t==='ocean'?'blue-400':t==='forest'?'green-500':'purple-500'} border-2 ${newTheme===t?'border-white':'border-transparent'}`}/>
-                                ))}
-                            </div>
-                            <button onClick={handleCreate} className="w-full bg-white text-slate-900 font-bold py-3 rounded-xl mt-4">Create Profile</button>
-                            <button onClick={()=>setIsAdding(false)} className="w-full text-gray-400 py-2">Cancel</button>
+                            <button onClick={handleAddEvent} className={`w-full py-3 rounded-xl ${theme.accent} text-white font-bold shadow-lg flex items-center justify-center gap-2`}><Save size={18}/> Save Event</button>
                         </div>
                     </div>
                 </div>
             )}
-            
-            <button onClick={signOut} className="fixed bottom-8 text-sm opacity-50 hover:opacity-100">Log Out of Family</button>
         </div>
     );
 };
 
-// --- FEATURE VIEWS ---
+const NotesManager = ({ member, familyId, db, appId, theme }) => {
+    const [notes, setNotes] = useState([]);
+    const [isEditor, setIsEditor] = useState(false);
+    const [title, setTitle] = useState('');
+    const [content, setContent] = useState('');
+    const [isListening, setIsListening] = useState(false);
+    const recognition = useRef(null);
 
-const Dashboard = ({ member, theme }) => {
-    const today = new Date();
-    const content = generateDailyContent(today, member.contentPref || 'inspiration');
-    const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-
-    return (
-        <div className="space-y-6 animate-fade-in-up">
-            <div className={`p-8 rounded-[2rem] ${theme.accent} text-white shadow-xl relative overflow-hidden`}>
-                <div className="relative z-10">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="opacity-80 text-xs font-bold uppercase mb-1">{dateStr}</p>
-                            <h2 className="text-3xl font-bold mb-4">Hi, {member.name}!</h2>
-                        </div>
-                        <div className="text-4xl opacity-20">{member.avatar}</div>
-                    </div>
-                    
-                    <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/20">
-                        <div className="flex justify-between items-start gap-4 mb-2">
-                            <span className="text-xs uppercase tracking-wider opacity-70 flex items-center gap-1">
-                                {member.contentPref === 'bible' ? <><BookOpen size={12}/> Daily Verse</> : <><Heart size={12}/> Daily Inspiration</>}
-                            </span>
-                            <button onClick={() => speakText(content, member.voiceSettings)} className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition"><Volume2 size={16} /></button>
-                        </div>
-                        <p className={`text-lg leading-relaxed ${member.role==='child' ? 'font-comic' : 'font-serif italic'}`}>"{content}"</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-                <div className={`${theme.card} p-5 rounded-2xl border flex flex-col items-center justify-center gap-2 h-32`}>
-                    <Users size={32} className="text-gray-400"/>
-                    <span className="font-bold text-gray-600">Family Status</span>
-                </div>
-                <div className={`${theme.card} p-5 rounded-2xl border flex flex-col items-center justify-center gap-2 h-32`}>
-                    <ListChecks size={32} className="text-gray-400"/>
-                    <span className="font-bold text-gray-600">My Tasks</span>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const FamilyCalendar = ({ member, members, familyId, db, appId, theme }) => {
-    const [events, setEvents] = useState([]);
-    const [newEvent, setNewEvent] = useState('');
-    const [selectedAssignee, setSelectedAssignee] = useState(member.id); // Default to self
-    const [eventTime, setEventTime] = useState('12:00');
-
-    // Load Events
     useEffect(() => {
-        if (!familyId) return;
-        const q = query(collection(db, 'artifacts', appId, 'users', familyId, 'events'), orderBy('startTime'));
-        const unsub = onSnapshot(q, snap => {
-            setEvents(snap.docs.map(d => ({id: d.id, ...d.data()})));
-        });
-        return () => unsub();
-    }, [familyId]);
+        if(!familyId) return;
+        const q = query(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.NOTES), where('familyId', '==', familyId), where('authorId', '==', member.id));
+        return onSnapshot(q, s => setNotes(s.docs.map(d=>({id:d.id, ...d.data()}))));
+    }, [familyId, member.id]);
 
-    const addEvent = async () => {
-        if (!newEvent) return;
-        
-        // Parse time to timestamp for today
-        const [hours, mins] = eventTime.split(':');
-        const eventDate = new Date();
-        eventDate.setHours(parseInt(hours), parseInt(mins), 0, 0);
+    useEffect(() => {
+        if (window.webkitSpeechRecognition || window.SpeechRecognition) {
+            const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
+            recognition.current = new SR();
+            recognition.current.continuous = true;
+            recognition.current.onresult = e => {
+                let final = '';
+                for (let i = e.resultIndex; i < e.results.length; ++i) if(e.results[i].isFinal) final += e.results[i][0].transcript;
+                if(final) setContent(p => p + ' ' + final);
+            };
+        }
+    }, []);
 
-        const assignedMember = members.find(m => m.id === selectedAssignee);
-
-        await addDoc(collection(db, 'artifacts', appId, 'users', familyId, 'events'), {
-            title: newEvent,
-            startTime: eventDate.getTime(),
-            memberId: selectedAssignee,
-            memberName: assignedMember ? assignedMember.name : 'Everyone',
-            alerted: false,
-            createdAt: Date.now()
-        });
-        setNewEvent('');
+    const toggleMic = () => {
+        if (isListening) { recognition.current.stop(); setIsListening(false); }
+        else { recognition.current.start(); setIsListening(true); }
     };
 
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Family Calendar</h2>
-            
-            {/* Add Event Box */}
-            <div className={`${theme.card} p-4 rounded-2xl border space-y-3`}>
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                    <button 
-                        onClick={()=>setSelectedAssignee('all')}
-                        className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap border ${selectedAssignee==='all' ? theme.accent + ' text-white border-transparent' : 'bg-gray-100 text-gray-600 border-gray-200'}`}
-                    >
-                        👨‍👩‍👧‍👦 Everyone
-                    </button>
-                    {members.map(m => (
-                        <button 
-                            key={m.id} 
-                            onClick={()=>setSelectedAssignee(m.id)}
-                            className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap border flex items-center gap-1 ${selectedAssignee===m.id ? theme.accent + ' text-white border-transparent' : 'bg-gray-100 text-gray-600 border-gray-200'}`}
-                        >
-                            {m.avatar} {m.name}
-                        </button>
-                    ))}
-                </div>
-                <div className="flex gap-2">
-                    <input type="time" value={eventTime} onChange={e=>setEventTime(e.target.value)} className="bg-gray-50 border rounded-xl px-2 text-sm"/>
-                    <input placeholder="Activity (e.g. Math Class)" className="flex-1 bg-gray-50 border rounded-xl px-3 text-sm" value={newEvent} onChange={e=>setNewEvent(e.target.value)}/>
-                    <button onClick={addEvent} className={`${theme.accent} text-white p-2 rounded-xl`}><Check size={20}/></button>
-                </div>
-            </div>
+    const save = async () => {
+        if(!title && !content) return;
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.NOTES), {
+            familyId, // Shared ID
+            title: title || 'Untitled', content, authorId: member.id, createdAt: Date.now()
+        });
+        setIsEditor(false); setTitle(''); setContent('');
+    };
 
-            {/* Event List */}
-            <div className="space-y-3">
-                {events.map(ev => {
-                    const isForMe = ev.memberId === member.id || ev.memberId === 'all';
-                    // Find member color style
-                    const owner = members.find(m => m.id === ev.memberId);
-                    const ownerTheme = owner ? THEMES[owner.theme] : THEMES['minimal'];
-                    
-                    return (
-                        <div key={ev.id} className={`flex items-center gap-4 p-4 rounded-2xl border transition ${isForMe ? 'bg-white shadow-md' : 'bg-gray-50 opacity-70 grayscale'}`}>
-                            <div className="flex flex-col items-center min-w-[50px]">
-                                <span className="text-xs font-bold text-gray-400">{new Date(ev.startTime).toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})}</span>
-                            </div>
-                            <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className={`text-[10px] px-2 py-0.5 rounded-full text-white ${ev.memberId==='all' ? 'bg-gray-800' : (ownerTheme?.accent || 'bg-gray-400')}`}>
-                                        {ev.memberName}
-                                    </span>
-                                </div>
-                                <p className="font-bold text-gray-800">{ev.title}</p>
-                            </div>
-                            <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'users',familyId,'events',ev.id))} className="text-gray-300 hover:text-red-400"><Trash2 size={16}/></button>
-                        </div>
-                    );
-                })}
-                {events.length === 0 && <div className="text-center p-10 text-gray-400">No events today.</div>}
+    if (isEditor) return (
+        <div className={`h-[75vh] flex flex-col ${theme.card} rounded-[2rem] shadow-2xl border border-white/20 overflow-hidden relative`}>
+            <div className="p-4 flex justify-between items-center border-b border-gray-100 bg-white/50 backdrop-blur-sm">
+                <button onClick={()=>setIsEditor(false)} className={`${theme.subtext} font-medium`}>Cancel</button>
+                <button onClick={save} className={`${theme.accent} text-white px-6 py-2 rounded-xl font-bold shadow-md`}>Save</button>
+            </div>
+            <div className="p-6 flex-1 relative flex flex-col">
+                <input className={`text-2xl font-bold bg-transparent outline-none w-full mb-4 ${theme.text}`} placeholder="Title..." value={title} onChange={e=>setTitle(e.target.value)}/>
+                <textarea className={`w-full flex-1 bg-transparent outline-none resize-none ${theme.text} opacity-80`} placeholder="Type or speak..." value={content} onChange={e=>setContent(e.target.value)}/>
+                <button onClick={toggleMic} className={`absolute bottom-6 right-6 p-4 rounded-full shadow-xl transition hover:scale-110 active:scale-90 ${isListening ? 'bg-red-500 animate-pulse text-white' : `${theme.accent} text-white`}`}>
+                    {isListening ? <MicOff/> : <Mic/>}
+                </button>
             </div>
         </div>
     );
+
+    return (
+        <div className="space-y-4">
+            <div className="flex justify-between items-center mb-2">
+                <h2 className="text-2xl font-bold px-2">My Notes</h2>
+                <button onClick={()=>setIsEditor(true)} className={`${theme.accent} text-white p-3 rounded-xl shadow-md hover:brightness-110 transition active:scale-95`}><PenTool size={20}/></button>
+            </div>
+            <div className="grid gap-3">
+                {notes.map(n => (
+                    <div key={n.id} className={`${theme.card} p-5 rounded-2xl border shadow-sm relative group`}>
+                        <h3 className="font-bold mb-1">{n.title}</h3>
+                        <p className="text-sm opacity-70 line-clamp-3">{n.content}</p>
+                        <button onClick={(e)=>{e.stopPropagation(); deleteDoc(doc(db,'artifacts',appId,'public','data',COLLECTIONS.NOTES,n.id))}} className="absolute top-2 right-2 p-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><Trash2 size={16}/></button>
+                    </div>
+                ))}
+                {notes.length === 0 && <div className="text-center py-12 opacity-40">No notes yet. Use voice to add one!</div>}
+            </div>
+        </div>
+    )
 };
 
-// Re-using NotesManager with small tweak to receive familyId
-const NotesManager = ({ member, familyId, db, appId, theme }) => {
-  // ... (Same logic as before, but saving to family sub-collection)
-  const [notes, setNotes] = useState([]);
-  const [isEditor, setIsEditor] = useState(false);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [isListening, setIsListening] = useState(false);
-  const recognition = useRef(null);
+const SettingsScreen = ({ member, members, familyId, db, appId, theme, onUpdate, onCreate }) => {
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [newName, setNewName] = useState('');
+    const [newRole, setNewRole] = useState('child');
+    const [newGender, setNewGender] = useState('female');
+    const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if(!familyId) return;
-    // Query notes where 'authorId' == member.id
-    const q = query(collection(db, 'artifacts', appId, 'users', familyId, 'notes'), where('authorId', '==', member.id));
-    const unsub = onSnapshot(q, snap => setNotes(snap.docs.map(d=>({id:d.id, ...d.data()}))));
-    return () => unsub();
-  }, [familyId, member.id]);
+    // --- RESTORED SETTINGS STATE ---
+    const [contentPref, setContentPref] = useState(member.contentPref || 'inspiration');
+    const [voiceGender, setVoiceGender] = useState(member.voiceSettings?.gender || 'female');
+    const [voiceSpeed, setVoiceSpeed] = useState(member.voiceSettings?.rate || 1);
+    const [voicePitch, setVoicePitch] = useState(member.voiceSettings?.pitch || 1);
 
-  useEffect(() => {
-    if (window.webkitSpeechRecognition || window.SpeechRecognition) {
-      const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
-      recognition.current = new SR();
-      recognition.current.continuous = true;
-      recognition.current.interimResults = true;
-      recognition.current.onresult = e => {
-        let final = '';
-        for (let i = e.resultIndex; i < e.results.length; ++i) if(e.results[i].isFinal) final += e.results[i][0].transcript;
-        if(final) setContent(p => p + ' ' + final);
-      };
-    }
-  }, []);
-
-  const toggleMic = () => {
-      if (isListening) { recognition.current.stop(); setIsListening(false); }
-      else { recognition.current.start(); setIsListening(true); }
-  };
-
-  const save = async () => {
-      if(!title && !content) return;
-      await addDoc(collection(db, 'artifacts', appId, 'users', familyId, 'notes'), {
-          title: title || 'Untitled', content, authorId: member.id, createdAt: Date.now()
-      });
-      setIsEditor(false); setTitle(''); setContent('');
-  };
-
-  if (isEditor) return (
-      <div className={`h-[80vh] flex flex-col ${theme.card} rounded-[2rem] shadow-2xl border border-white/20 overflow-hidden relative`}>
-          <div className="p-4 flex justify-between items-center border-b border-gray-100 bg-white/50 backdrop-blur-sm">
-              <button onClick={()=>setIsEditor(false)} className="text-gray-500">Cancel</button>
-              <button onClick={save} className={`${theme.accent} text-white px-4 py-2 rounded-xl font-bold`}>Save</button>
-          </div>
-          <div className="p-6 flex-1 relative">
-              <input className="text-2xl font-bold bg-transparent outline-none w-full mb-4" placeholder="Title..." value={title} onChange={e=>setTitle(e.target.value)}/>
-              <textarea className="w-full h-full bg-transparent outline-none resize-none" placeholder="Type or speak..." value={content} onChange={e=>setContent(e.target.value)}/>
-              <button onClick={toggleMic} className={`absolute bottom-6 right-6 p-4 rounded-full shadow-xl transition ${isListening ? 'bg-red-500 animate-pulse' : theme.accent} text-white`}>
-                  {isListening ? <MicOff/> : <Mic/>}
-              </button>
-          </div>
-      </div>
-  );
-
-  return (
-      <div className="space-y-4">
-          <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">My Notes</h2>
-              <button onClick={()=>setIsEditor(true)} className={`${theme.accent} text-white p-3 rounded-xl`}><PenTool size={20}/></button>
-          </div>
-          <div className="grid gap-3">
-              {notes.map(n => (
-                  <div key={n.id} className={`${theme.card} p-4 rounded-xl border`}>
-                      <div className="flex justify-between items-start">
-                          <h3 className="font-bold">{n.title}</h3>
-                          <div className="flex gap-2">
-                              <button onClick={()=>speakText(n.content, member.voiceSettings)} className="text-gray-400 hover:text-blue-500"><PlayCircle size={18}/></button>
-                              <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'users',familyId,'notes',n.id))} className="text-gray-400 hover:text-red-500"><Trash2 size={18}/></button>
-                          </div>
-                      </div>
-                      <p className="text-sm text-gray-600 line-clamp-2">{n.content}</p>
-                  </div>
-              ))}
-          </div>
-      </div>
-  );
-};
-
-const SettingsScreen = ({ member, familyId, db, appId, theme, onUpdate }) => {
     const updatePref = async (field, value) => {
         const newData = { ...member, [field]: value };
-        onUpdate(newData); // Optimistic UI
-        // In real app, we update the specific member document in the 'members' subcollection
-        // For this demo we just update local state mostly, but here is the DB call:
-        await setDoc(doc(db, 'artifacts', appId, 'users', familyId, 'members', member.id), newData, { merge: true });
+        onUpdate(newData); 
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS, member.id), newData, { merge: true });
+    };
+
+    // Instant update for toggle buttons
+    const updateContentPref = async (newPref) => {
+        setContentPref(newPref);
+        const newData = { ...member, contentPref: newPref };
+        onUpdate(newData);
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS, member.id), newData, { merge: true });
+    };
+
+    // Instant update for voice gender
+    const updateVoiceGender = async (newGender) => {
+        setVoiceGender(newGender);
+        const newVoice = { ...member.voiceSettings, gender: newGender };
+        const newData = { ...member, voiceSettings: newVoice };
+        onUpdate(newData);
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS, member.id), newData, { merge: true });
+    };
+
+    // Manual save for sliders (to avoid too many writes)
+    const updateVoiceSliders = async () => {
+        const newVoice = { gender: voiceGender, rate: voiceSpeed, pitch: voicePitch };
+        const newData = { ...member, voiceSettings: newVoice };
+        onUpdate(newData);
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS, member.id), newData, { merge: true });
+        speakText("Voice settings updated.", newVoice);
+    };
+
+    const handleAddMember = () => {
+        if (!newName) return;
+        let avatar = '👤';
+        if (newRole === 'parent') avatar = newGender === 'male' ? '👨' : '👩';
+        else avatar = newGender === 'male' ? '👦' : '👧';
+        
+        onCreate(newName, newRole, newGender, 'ocean', avatar); 
+        setShowAddModal(false);
+        setNewName('');
+    };
+    
+    const copyCode = () => {
+        navigator.clipboard.writeText(familyId);
+        setCopied(true);
+        setTimeout(()=>setCopied(false), 2000);
     };
 
     return (
         <div className="space-y-6 pb-20">
-            <h2 className="text-2xl font-bold">Settings</h2>
+            <h2 className="text-2xl font-bold px-2">Settings</h2>
             
-            {/* Daily Content Pref */}
-            <section className={`${theme.card} p-6 rounded-[2rem] border`}>
-                <h3 className="font-bold mb-4 flex items-center gap-2"><BookOpen size={18}/> Daily Content</h3>
-                <div className="flex bg-gray-100 p-1 rounded-xl">
-                    <button onClick={()=>updatePref('contentPref', 'inspiration')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${member.contentPref!=='bible' ? 'bg-white shadow text-indigo-600' : 'text-gray-400'}`}>Quotes</button>
-                    <button onClick={()=>updatePref('contentPref', 'bible')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${member.contentPref==='bible' ? 'bg-white shadow text-indigo-600' : 'text-gray-400'}`}>Bible Verses</button>
+            {/* FAMILY CODE SHARING */}
+            <section className={`${theme.card} p-6 rounded-[2rem] border overflow-hidden`}>
+                <h3 className="font-bold mb-4 flex items-center gap-2"><Share2 size={18} className="text-green-500"/> Share Family</h3>
+                <p className="text-xs opacity-60 mb-3">Tap to copy the unique ID. Share this ONLY with family.</p>
+                <button onClick={copyCode} className="w-full bg-black/5 p-4 rounded-xl flex items-center justify-between group hover:bg-black/10 transition active:scale-95">
+                    <div className="flex flex-col items-start overflow-hidden">
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Family ID</span>
+                        <code className="font-mono font-bold text-xl tracking-widest text-gray-800">{familyId}</code>
+                    </div>
+                    {copied ? <div className="flex items-center gap-1 text-green-600 font-bold text-xs"><Check size={18}/> Copied</div> : <Copy size={18} className="opacity-40 group-hover:opacity-100"/>}
+                </button>
+            </section>
+
+             {/* PREFERENCES RESTORED */}
+             <section className={`${theme.card} p-6 rounded-[2rem] border`}>
+                <h3 className="font-bold mb-4 flex items-center gap-2"><Sliders size={18} className="text-blue-500"/> My Preferences</h3>
+                
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold opacity-50 mb-2 block">DAILY CONTENT</label>
+                        <div className="flex bg-black/5 p-1 rounded-xl">
+                            <button onClick={()=>updateContentPref('inspiration')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${contentPref==='inspiration' ? 'bg-white shadow text-black' : 'opacity-50'}`}>Quotes</button>
+                            <button onClick={()=>updateContentPref('bible')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${contentPref==='bible' ? 'bg-white shadow text-black' : 'opacity-50'}`}>Bible Verses</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold opacity-50 mb-2 block flex justify-between"><span>VOICE ASSISTANT</span> <Speaker size={12}/></label>
+                         <div className="flex bg-black/5 p-1 rounded-xl mb-2">
+                            <button onClick={()=>updateVoiceGender('female')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${voiceGender==='female' ? 'bg-white shadow text-pink-600' : 'opacity-50'}`}>Female</button>
+                            <button onClick={()=>updateVoiceGender('male')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${voiceGender==='male' ? 'bg-white shadow text-blue-600' : 'opacity-50'}`}>Male</button>
+                        </div>
+                        <div className="flex gap-2">
+                             <div className="flex-1">
+                                <label className="text-[10px] font-bold opacity-40">Speed</label>
+                                <input type="range" min="0.5" max="2" step="0.1" value={voiceSpeed} onChange={e=>setVoiceSpeed(parseFloat(e.target.value))} className="w-full accent-indigo-600"/>
+                             </div>
+                             <div className="flex-1">
+                                <label className="text-[10px] font-bold opacity-40">Pitch</label>
+                                <input type="range" min="0.5" max="2" step="0.1" value={voicePitch} onChange={e=>setVoicePitch(parseFloat(e.target.value))} className="w-full accent-indigo-600"/>
+                             </div>
+                        </div>
+                        <button onClick={updateVoiceSliders} className="w-full py-2 bg-black/5 rounded-lg text-[10px] font-bold hover:bg-black/10 transition mt-2">Test & Save Voice Settings</button>
+                    </div>
                 </div>
             </section>
 
-            {/* Theme */}
+            {/* FAMILY MANAGEMENT */}
             <section className={`${theme.card} p-6 rounded-[2rem] border`}>
-                <h3 className="font-bold mb-4 flex items-center gap-2"><Palette size={18}/> My Theme</h3>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold flex items-center gap-2"><Users size={18} className="text-indigo-500"/> Family Members</h3>
+                    <span className="text-xs font-bold opacity-50 bg-black/5 px-2 py-1 rounded-full">{members.length} / 6</span>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                    {members.map(m => (
+                        <div key={m.id} className="flex flex-col items-center gap-2">
+                             <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl border border-black/10 shadow-sm">
+                                {m.avatar}
+                             </div>
+                             <span className={`text-[10px] font-bold opacity-70 truncate max-w-[60px] ${theme.subtext}`}>{m.name}</span>
+                        </div>
+                    ))}
+                    {members.length < 6 && (
+                        <button onClick={() => setShowAddModal(true)} className="flex flex-col items-center gap-2 opacity-60 hover:opacity-100 transition group">
+                             <div className="w-14 h-14 rounded-full border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 group-hover:border-indigo-500 group-hover:text-indigo-500">
+                                <UserPlus size={24} />
+                             </div>
+                             <span className="text-[10px] font-bold">Add New</span>
+                        </button>
+                    )}
+                </div>
+            </section>
+
+            {/* THEME SELECTION */}
+            <section className={`${theme.card} p-6 rounded-[2rem] border`}>
+                <h3 className="font-bold mb-4 flex items-center gap-2"><Palette size={18} className="text-pink-500"/> Theme</h3>
                 <div className="grid grid-cols-4 gap-2">
                     {Object.entries(THEMES).map(([k, t]) => (
-                        <button key={k} onClick={()=>updatePref('theme', k)} className={`h-12 rounded-lg ${t.bg} border-2 ${member.theme===k ? 'border-indigo-500 scale-105' : 'border-transparent opacity-50'}`}/>
+                        <button key={k} onClick={()=>updatePref('theme', k)} className={`h-12 rounded-xl ${t.bg} border-2 relative overflow-hidden transition-all duration-300 ${member.theme===k ? 'border-indigo-500 ring-2 ring-indigo-500 ring-offset-2 scale-105 shadow-md' : 'border-black/5 hover:border-black/20'}`}>
+                             <div className={`absolute bottom-0 right-0 w-6 h-6 ${t.accent} opacity-20 rounded-tl-xl`}></div>
+                        </button>
                     ))}
                 </div>
             </section>
 
-            {/* Voice */}
-            <section className={`${theme.card} p-6 rounded-[2rem] border space-y-4`}>
-                <h3 className="font-bold flex items-center gap-2"><Music size={18}/> Voice</h3>
-                <div className="flex gap-2">
-                    <button onClick={()=>updatePref('voiceSettings', {...member.voiceSettings, gender: 'female'})} className={`flex-1 py-2 border rounded-xl text-sm font-bold ${member.voiceSettings?.gender!=='male' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white'}`}>Female</button>
-                    <button onClick={()=>updatePref('voiceSettings', {...member.voiceSettings, gender: 'male'})} className={`flex-1 py-2 border rounded-xl text-sm font-bold ${member.voiceSettings?.gender==='male' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white'}`}>Male</button>
-                </div>
-            </section>
+             {showAddModal && (
+                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className={`w-full max-w-sm bg-white p-6 rounded-[2rem] shadow-2xl border`}>
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-black">New Member</h3>
+                            <button onClick={()=>setShowAddModal(false)} className="bg-gray-100 p-2 rounded-full hover:bg-gray-200"><X className="text-gray-500" size={18}/></button>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 mb-1 block">NAME</label>
+                                <input className="w-full p-4 rounded-xl bg-gray-50 border border-gray-200 text-black focus:border-indigo-500 outline-none" placeholder="e.g. Liam" value={newName} onChange={e=>setNewName(e.target.value)}/>
+                            </div>
+                            <div className="flex gap-4">
+                                <div className="flex-1">
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">ROLE</label>
+                                    <div className="flex bg-gray-100 p-1 rounded-xl">
+                                        <button onClick={()=>setNewRole('parent')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newRole==='parent'?'bg-indigo-600 text-white':'text-gray-400'}`}>Parent</button>
+                                        <button onClick={()=>setNewRole('child')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newRole==='child'?'bg-indigo-600 text-white':'text-gray-400'}`}>Child</button>
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">GENDER</label>
+                                    <div className="flex bg-gray-100 p-1 rounded-xl">
+                                        <button onClick={()=>setNewGender('male')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newGender==='male'?'bg-blue-600 text-white':'text-gray-400'}`}>Boy</button>
+                                        <button onClick={()=>setNewGender('female')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newGender==='female'?'bg-pink-600 text-white':'text-gray-400'}`}>Girl</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={handleAddMember} className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl mt-4 hover:scale-[1.02] transition shadow-lg shadow-indigo-200">Create Profile</button>
+                        </div>
+                    </div>
+                 </div>
+            )}
         </div>
     );
 };
