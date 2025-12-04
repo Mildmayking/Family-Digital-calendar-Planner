@@ -283,8 +283,12 @@ function App() {
           // 2. Consume the license key
           await window.F_setDoc(licenseRef, { used: true, usedBy: user.uid, usedAt: Date.now() }, { merge: true });
           
-          // 3. Update user settings to mark license as verified
-          await window.F_setDoc(window.F_doc(firebaseRefs.db, 'artifacts', appId, 'users', user.uid, 'settings', 'config'), { licenseVerified: true, licenseId: licenseKey }, { merge: true });
+          // 3. Update user settings to mark license as verified and store the licenseType
+          await window.F_setDoc(window.F_doc(firebaseRefs.db, 'artifacts', appId, 'users', user.uid, 'settings', 'config'), { 
+              licenseVerified: true, 
+              licenseId: licenseKey, 
+              licenseType: licenseData.licenseType // Store the type: 'annual', 'monthly', 'lifetime'
+          }, { merge: true });
           
           // Success: Redirect to family setup
           setView('setup_family');
@@ -334,9 +338,25 @@ function App() {
             ownerUid: user.uid
         });
       } else if (mode === 'join') {
-          // New member joining an existing family is automatically added to members collection 
-          // if they don't already have an entry (which shouldn't, as the profile selector checks this)
-          
+          // If joining, we check if the current user already has a profile in that family. 
+          // If not, we create one for them.
+          const userInFamilyQuery = window.F_query(window.F_collection(firebaseRefs.db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), window.F_where('familyId', '==', fid), window.F_where('createdBy', '==', user.uid));
+          const userInFamilySnap = await window.F_getDocs(userInFamilyQuery);
+
+          if (userInFamilySnap.empty) {
+               await window.F_addDoc(window.F_collection(firebaseRefs.db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), { 
+                   familyId: fid,
+                   name: user.email.split('@')[0], // Use email prefix as default name for member
+                   role: 'child', 
+                   gender: 'female', 
+                   theme: 'ocean', 
+                   contentPref: 'inspiration', 
+                   voiceSettings: { gender: 'female', rate: 1, pitch: 1 }, 
+                   avatar: '👤',
+                   createdBy: user.uid,
+                   ownerUid: snap.docs[0]?.data().ownerUid
+               });
+          }
       }
       
       setView('profiles');
@@ -693,10 +713,9 @@ const Dashboard = ({ member, events, theme, setView }) => {
 };
 
 const FamilyCalendar = ({ member, members, events, familyId, db, appId, theme }) => {
+    // FIX: Set currentDate initialization to simply be 'today' without artificial limit
     const [currentDate, setCurrentDate] = useState(() => {
-        const now = new Date();
-        if (now.getFullYear() < 2025 || (now.getFullYear() === 2025 && now.getMonth() < 11)) return new Date(2025, 11, 1);
-        return now;
+        return new Date();
     });
     const [selectedAssignee, setSelectedAssignee] = useState(member.id); 
     const [showModal, setShowModal] = useState(false);
@@ -725,6 +744,7 @@ const FamilyCalendar = ({ member, members, events, familyId, db, appId, theme })
     };
 
     const changeMonth = (offset) => {
+        // FIX: Standard date manipulation to allow scrolling indefinitely
         const newDate = new Date(currentDate);
         newDate.setMonth(newDate.getMonth() + offset);
         setCurrentDate(newDate);
