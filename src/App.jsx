@@ -470,7 +470,13 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50">
                     <div className="bg-slate-800 p-8 rounded-3xl w-full max-w-sm">
                         <h3 className="text-xl font-bold mb-6">New Profile</h3>
-                        <input className="w-full p-4 mb-4 bg-black/30 rounded-xl text-white" placeholder="Name" value={name} onChange={e=>setNewName(e.target.value)}/>
+                        {/* FIX: Binding value and onChange handler to state */}
+                        <input 
+                            className="w-full p-4 mb-4 bg-black/30 rounded-xl text-white" 
+                            placeholder="Name" 
+                            value={name} 
+                            onChange={e=>setName(e.target.value)}
+                        />
                         <div className="flex gap-2 mb-4"><button onClick={()=>setRole('parent')} className={`flex-1 p-3 rounded-lg font-bold ${role==='parent'?'bg-indigo-600':'bg-slate-700'}`}>Parent</button><button onClick={()=>setRole('child')} className={`flex-1 p-3 rounded-lg font-bold ${role==='child'?'bg-indigo-600':'bg-slate-700'}`}>Child</button></div>
                         <div className="flex gap-2 mb-6"><button onClick={()=>setGender('male')} className={`flex-1 p-3 rounded-lg font-bold ${gender==='male'?'bg-blue-600':'bg-slate-700'}`}>Boy</button><button onClick={()=>setGender('female')} className={`flex-1 p-3 rounded-lg font-bold ${gender==='female'?'bg-pink-600':'bg-slate-700'}`}>Girl</button></div>
                         <button onClick={handle} className="w-full bg-white text-slate-900 py-4 rounded-xl font-bold">Create</button>
