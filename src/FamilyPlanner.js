@@ -5,11 +5,15 @@ const { useState, useEffect, useRef } = React;
 const lucide = window.lucide; // Ensure lucide is accessed from the global window object
 
 // --- FIREBASE CONFIGURATION (Managed Service Model) ---
-// These are the unique keys for your new project: family-digital-calendar-hub
+// KEYS ARE NOW READ SECURELY FROM NETLIFY ENVIRONMENT VARIABLES (process.env.REACT_APP_...)
+// THE VALUES MUST BE SET IN YOUR NETLIFY DASHBOARD TO WORK.
 const firebaseConfig = {
-  apiKey: "AIzaSyDcY8yQQOZ6lGG_x9A7V50FaKb2wIWFFWk",
-  authDomain: "family-digital-calendar-hub.firebaseapp.com",
-  projectId: "family-digital-calendar-hub",
+  // We use the environment variables created in Netlify:
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  
+  // These remaining values are low-security and can remain hardcoded:
   storageBucket: "family-digital-calendar-hub.firebasestorage.app",
   messagingSenderId: "495029760176",
   appId: "1:495029760176:web:67f87c6faa2eccdb1ecb75"
@@ -19,19 +23,24 @@ const firebaseConfig = {
 let appInstance = null;
 let authInstance = null;
 let dbInstance = null;
-const appId = "notebook-2026-family-v10-saas-final"; // New App ID for strict mode
+const appId = "notebook-2026-family-v10-saas-final"; 
 const NETLIFY_URL = "https://family-digital-calendar-planner.netlify.app/"; 
 
 const COLLECTIONS = {
     MEMBERS: 'planner_members',
     EVENTS: 'planner_events',
     NOTES: 'planner_notes',
-    LICENSES: 'active_licenses' // New collection for license keys
+    LICENSES: 'active_licenses' 
 };
 
 // Initialize Firebase instances (called only once)
 function initFirebase() {
     if (!appInstance) {
+        if (!firebaseConfig.apiKey) {
+            console.error("FIREBASE ERROR: API Key is missing. Ensure all three REACT_APP_FIREBASE_XXX variables are set in Netlify's Environment settings.");
+            // Return dummy refs to prevent immediate runtime crash
+            return { app: null, auth: null, db: null }; 
+        }
         // Use global window accessors for Firebase setup (F_ prefix defined in index.html)
         appInstance = window.F_initializeApp(firebaseConfig);
         authInstance = window.F_getAuth(appInstance);
@@ -338,8 +347,8 @@ function App() {
             ownerUid: user.uid
         });
       } else if (mode === 'join') {
-          // If joining, we check if the current user already has a profile in that family. 
-          // If not, we create one for them.
+          // New member joining an existing family is automatically added to members collection 
+          // if they don't already have an entry (which shouldn't, as the profile selector checks this)
           const userInFamilyQuery = window.F_query(window.F_collection(firebaseRefs.db, 'artifacts', appId, 'public', 'data', COLLECTIONS.MEMBERS), window.F_where('familyId', '==', fid), window.F_where('createdBy', '==', user.uid));
           const userInFamilySnap = await window.F_getDocs(userInFamilyQuery);
 
@@ -712,7 +721,7 @@ const Dashboard = ({ member, events, theme, setView }) => {
     );
 };
 
-const FamilyCalendar = ({ member, members, events, familyId, db, appId, theme }) => {
+const FamilyCalendar = ({ member, members, events, theme, db, appId }) => {
     // FIX: Set currentDate initialization to simply be 'today' without artificial limit
     const [currentDate, setCurrentDate] = useState(() => {
         return new Date();
@@ -1085,15 +1094,13 @@ Family Code (Manual Fallback): ${familyId}`;
                                 <div className="flex-1">
                                     <label className="text-xs font-bold text-slate-500 mb-1 block">ROLE</label>
                                     <div className="flex bg-gray-100 p-1 rounded-xl">
-                                        <button onClick={()=>setNewRole('parent')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newRole==='parent'?'bg-indigo-600 text-white':'text-gray-400'}`}>Parent</button>
-                                        <button onClick={()=>setNewRole('child')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newRole==='child'?'bg-indigo-600 text-white':'text-gray-400'}`}>Child</button>
+                                        <button onClick={()=>setNewRole('parent')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newRole==='parent'?'bg-indigo-600 text-white':'text-gray-400'}`}>Parent</button><button onClick={()=>setNewRole('child')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newRole==='child'?'bg-indigo-600 text-white':'text-gray-400'}`}>Child</button>
                                     </div>
                                 </div>
                                 <div className="flex-1">
                                     <label className="text-xs font-bold text-slate-500 mb-1 block">GENDER</label>
                                     <div className="flex bg-gray-100 p-1 rounded-xl">
-                                        <button onClick={()=>setNewGender('male')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newGender==='male'?'bg-blue-600 text-white':'text-gray-400'}`}>Boy</button>
-                                        <button onClick={()=>setNewGender('female')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newGender==='female'?'bg-pink-600 text-white':'text-gray-400'}`}>Girl</button>
+                                        <button onClick={()=>setNewGender('male')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newGender==='male'?'bg-blue-600':'bg-slate-700'}`}>Boy</button><button onClick={()=>setNewGender('female')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${newGender==='female'?'bg-pink-600':'bg-slate-700'}`}>Girl</button>
                                     </div>
                                 </div>
                             </div>
