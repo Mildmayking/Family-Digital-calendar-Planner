@@ -5,15 +5,13 @@ const { useState, useEffect, useRef } = React;
 const lucide = window.lucide; // Ensure lucide is accessed from the global window object
 
 // --- FIREBASE CONFIGURATION (Managed Service Model) ---
-// KEYS ARE NOW READ SECURELY FROM NETLIFY ENVIRONMENT VARIABLES (process.env.REACT_APP_...)
-// THE VALUES MUST BE SET IN YOUR NETLIFY DASHBOARD TO WORK.
+// KEYS ARE READ SECURELY FROM NETLIFY ENVIRONMENT VARIABLES (process.env.REACT_APP_...)
 const firebaseConfig = {
-  // We use the environment variables created in Netlify:
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
   
-  // These remaining values are low-security and can remain hardcoded:
+  // These values are low-security and can remain hardcoded:
   storageBucket: "family-digital-calendar-hub.firebasestorage.app",
   messagingSenderId: "495029760176",
   appId: "1:495029760176:web:67f87c6faa2eccdb1ecb75"
@@ -23,14 +21,14 @@ const firebaseConfig = {
 let appInstance = null;
 let authInstance = null;
 let dbInstance = null;
-const appId = "notebook-2026-family-v10-saas-final"; 
+const appId = "notebook-2026-family-v10-saas-final"; // New App ID for strict mode
 const NETLIFY_URL = "https://family-digital-calendar-planner.netlify.app/"; 
 
 const COLLECTIONS = {
     MEMBERS: 'planner_members',
     EVENTS: 'planner_events',
     NOTES: 'planner_notes',
-    LICENSES: 'active_licenses' 
+    LICENSES: 'active_licenses' // New collection for license keys
 };
 
 // Initialize Firebase instances (called only once)
