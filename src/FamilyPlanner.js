@@ -1,5 +1,5 @@
 // Note: This is standard JavaScript (ES6) ready for deployment.
-// It relies on functions being loaded globally by the index.html wrapper file (F_*)
+// This version relies on the global 'firebase' object which is guaranteed to be loaded by index.html.
 
 const { useState, useEffect, useRef } = React;
 const lucide = window.lucide; // Ensure lucide is accessed from the global window object
@@ -58,9 +58,9 @@ const BIBLE_VERSES = [
     "But those who hope in the LORD will renew their strength. They will soar on wings like eagles. - Isaiah 40:31",
     "Love is patient, love is kind. It does not envy, it does not boast, it is not proud. - 1 Corinthians 13:4",
     "The LORD is my shepherd, I lack nothing. - Psalm 23:1",
-    "And we know that in all things God works for the good of those who love him. - Romans 8:28",
+    "And we know that in all things God works for the good of those who love him. - Romans 8.28",
     "The name of the LORD is a fortified tower; the righteous run to it and are safe. - Proverbs 18:10",
-    "Therefore do not worry about tomorrow, for tomorrow will worry about itself. - Matthew 6:34"
+    "Therefore do not worry about tomorrow, for tomorrow will worry about itself. - Matthew 6.34"
 ];
 
 const INSPIRATION_QUOTES = [
