@@ -1,15 +1,16 @@
 // Note: This is standard JavaScript (ES6) ready for deployment.
-// It relies on global functions exposed by the index.html wrapper file (F_*)
+// This version uses hardcoded strings for reliability, as Netlify's secrets scanner passed.
 
 const { useState, useEffect, useRef } = React;
 const lucide = window.lucide; // Ensure lucide is accessed from the global window object
 
 // --- FIREBASE CONFIGURATION (Managed Service Model) ---
-// KEYS ARE READ SECURELY FROM NETLIFY ENVIRONMENT VARIABLES (process.env.REACT_APP_...)
+// KEYS ARE NOW HARDCODED TO ENSURE RELIABILITY IN THE BROWSER ENVIRONMENT,
+// WHICH RESOLVES THE WHITE SCREEN ISSUE CAUSED BY FAILING ENVIRONMENT VARIABLE READS.
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  apiKey: "AIzaSyDcY8yQQOZ6lGG_x9A7V50FaKb2wIWFFWk",
+  authDomain: "family-digital-calendar-hub.firebaseapp.com",
+  projectId: "family-digital-calendar-hub",
   
   // These values are low-security and can remain hardcoded:
   storageBucket: "family-digital-calendar-hub.firebasestorage.app",
@@ -34,11 +35,6 @@ const COLLECTIONS = {
 // Initialize Firebase instances (called only once)
 function initFirebase() {
     if (!appInstance) {
-        if (!firebaseConfig.apiKey) {
-            console.error("FIREBASE ERROR: API Key is missing. Ensure all three REACT_APP_FIREBASE_XXX variables are set in Netlify's Environment settings.");
-            // Return dummy refs to prevent immediate runtime crash
-            return { app: null, auth: null, db: null }; 
-        }
         // Use global window accessors for Firebase setup (F_ prefix defined in index.html)
         appInstance = window.F_initializeApp(firebaseConfig);
         authInstance = window.F_getAuth(appInstance);
