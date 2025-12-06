@@ -55,7 +55,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('auth'); 
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
-  const [alertedEvents, setAlertedEvents] = useState(new Set()); 
+  const [alertedEvents, setAlertedEvents] = new Set(); // Simplified Set initialization
   
   const audioRef = useRef(null);
   const [firebaseRefs, setFirebaseRefs] = useState(null);
@@ -69,6 +69,7 @@ function App() {
     const initAuth = async () => { 
         if (!refs.auth) return;
         try { 
+            // NOTE: window.F_signInWithCustomToken is used here to match the index.html setup
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                 await window.F_signInWithCustomToken(refs.auth, __initial_auth_token); 
             }
@@ -178,11 +179,7 @@ function App() {
       e.preventDefault(); 
       if (!firebaseRefs) return;
       try { 
-          if (isLogin) {
-              await window.F_signInWithEmailAndPassword(firebaseRefs.auth, email, password); 
-          } else {
-              await window.F_createUserWithEmailAndPassword(firebaseRefs.auth, email, password);
-          }
+          await (isLogin ? window.F_signInWithEmailAndPassword(firebaseRefs.auth, email, password) : window.F_createUserWithEmailAndPassword(firebaseRefs.auth, email, password));
       } catch (e) { 
           throw e;
       } 
@@ -916,8 +913,6 @@ Family Code (Manual Fallback): ${familyId}`;
                     const textarea = document.createElement('textarea');
                     textarea.value = shareMessage;
                     document.body.appendChild(textarea);
-                    textarea.select();
-                    document.execCommand('copy');
                     document.body.removeChild(textarea);
                     setCopiedState();
                 });
