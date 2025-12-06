@@ -55,7 +55,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('auth'); 
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
-  const [alertedEvents, setAlertedEvents] = new Set(); // Simplified Set initialization
+  const [alertedEvents, setAlertedEvents] = useState(new Set()); // Fixed Set initialization
   
   const audioRef = useRef(null);
   const [firebaseRefs, setFirebaseRefs] = useState(null);
@@ -156,8 +156,7 @@ function App() {
         const currentMinutes = now.getMinutes();
 
         events.forEach(ev => {
-            const evDate = new Date(ev.startTime);
-            if (evDate.getDate() === now.getDate() && evDate.getMonth() === now.getMonth() && evDate.getFullYear() === now.getFullYear() && evDate.getHours() === currentHours && evDate.getMinutes() === currentMinutes) {
+            if (new Date(ev.startTime).getDate() === now.getDate() && new Date(ev.startTime).getMonth() === now.getMonth() && new Date(ev.startTime).getFullYear() === now.getFullYear() && new Date(ev.startTime).getHours() === currentHours && new Date(ev.startTime).getMinutes() === currentMinutes) {
                 const alertKey = `${ev.id}-${currentHours}:${currentMinutes}`;
                 if (!alertedEvents.has(alertKey)) {
                     let prefix = "";
@@ -506,12 +505,12 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
     const [addError, setAddError] = useState('');
     const familyIsFull = members.length >= 6;
 
-    const handleCreate = async () => {
-        if(!name) return;
+    const handleCreate = async (modalName, modalRole, modalGender) => {
+        if(!modalName) return;
         setAddError('');
         try {
-            const av = role==='parent' ? (gender==='male'?'👨':'👩') : (gender==='male'?'👦':'👧');
-            await onCreate(name, role, gender, 'ocean', av);
+            const av = modalRole==='parent' ? (modalGender==='male'?'👨':'👩') : (modalGender==='male'?'👦':'👧');
+            await onCreate(modalName, modalRole, modalGender, 'ocean', av);
             setAdd(false); setName('');
         } catch (e) {
             setAddError(e.message);
@@ -523,157 +522,180 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
         const [modalRole, setModalRole] = useState('child');
         const [modalGender, setModalGender] = useState('female');
 
-        return e('div', { className: "fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" },
-            e('div', { className: "w-full max-w-sm bg-white p-6 rounded-[2rem] shadow-2xl border" },
-                e('div', { className: "flex justify-between items-center mb-6" },
-                    e('h3', { className: "text-xl font-bold text-black" }, "New Member"),
-                    e('button', { onClick: () => setShowAddModal(false), className: "bg-gray-100 p-2 rounded-full hover:bg-gray-200" }, e(lucide.X, { size: 18, className: "text-gray-500" }))
-                ),
-                e('div', { className: "space-y-4" },
-                    e('div', null,
-                        e('label', { className: "text-xs font-bold text-gray-400 mb-1 block" }, "NAME"),
-                        e('input', { className: "w-full p-4 rounded-xl bg-gray-50 border border-gray-200 text-black focus:border-indigo-500 outline-none", placeholder: "e.g. Liam", value: modalName, onChange: evt => setModalName(evt.target.value) })
-                    ),
-                    e('div', { className: "flex gap-4" },
-                        e('div', { className: "flex-1" },
-                            e('label', { className: "text-xs font-bold text-slate-500 mb-1 block" }, "ROLE"),
-                            e('div', { className: "flex bg-gray-100 p-1 rounded-xl" },
-                                e('button', { onClick: () => setModalRole('parent'), className: `flex-1 p-3 rounded-lg font-bold text-xs transition ${modalRole === 'parent' ? 'bg-indigo-600 text-white' : 'text-gray-400'}` }, "Parent"),
-                                e('button', { onClick: () => setModalRole('child'), className: `flex-1 p-3 rounded-lg font-bold text-xs transition ${modalRole === 'child' ? 'bg-indigo-600 text-white' : 'text-gray-400'}` }, "Child")
-                            )
-                        ),
-                        e('div', { className: "flex-1" },
-                            e('label', { className: "text-xs font-bold text-slate-500 mb-1 block" }, "GENDER"),
-                            e('div', { className: "flex bg-gray-100 p-1 rounded-xl" },
-                                e('button', { onClick: () => setModalGender('male'), className: `flex-1 p-3 rounded-lg font-bold text-xs transition ${modalGender === 'male' ? 'bg-blue-600 text-white' : 'bg-slate-700'}` }, "Boy"),
-                                e('button', { onClick: () => setModalGender('female'), className: `flex-1 p-3 rounded-lg font-bold text-xs transition ${modalGender === 'female' ? 'bg-pink-600 text-white' : 'bg-slate-700'}` }, "Girl")
-                            )
-                        )
-                    ),
-                    e('button', { onClick: () => handleCreate(modalName, modalRole, modalGender), className: "w-full bg-indigo-600 text-white font-bold py-4 rounded-xl mt-4 hover:scale-[1.02] transition shadow-lg shadow-indigo-200" }, "Create Profile")
-                )
-            );
-        };
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                <div className="w-full max-w-sm bg-white p-6 rounded-[2rem] shadow-2xl border">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold text-black">New Member</h3>
+                        <button onClick={() => setShowAddModal(false)} className="bg-gray-100 p-2 rounded-full hover:bg-gray-200">{e(lucide.X, { size: 18, className: "text-gray-500" })}</button>
+                    </div>
+                    <div className="space-y-4">
+                        <div >
+                            <label className="text-xs font-bold text-gray-400 mb-1 block">NAME</label>
+                            <input className="w-full p-4 rounded-xl bg-gray-50 border border-gray-200 text-black focus:border-indigo-500 outline-none" placeholder="e.g. Liam" value={modalName} onChange={evt => setModalName(evt.target.value)} />
+                        </div>
+                        <div className="flex gap-4">
+                            <div className="flex-1">
+                                <label className="text-xs font-bold text-slate-500 mb-1 block">ROLE</label>
+                                <div className="flex bg-gray-100 p-1 rounded-xl">
+                                    <button onClick={() => setModalRole('parent')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${modalRole === 'parent' ? 'bg-indigo-600 text-white' : 'text-gray-400'}`}>Parent</button>
+                                    <button onClick={() => setModalRole('child')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${modalRole === 'child' ? 'bg-indigo-600 text-white' : 'text-gray-400'}`}>Child</button>
+                                </div>
+                            </div>
+                            <div className="flex-1">
+                                <label className="text-xs font-bold text-slate-500 mb-1 block">GENDER</label>
+                                <div className="flex bg-gray-100 p-1 rounded-xl">
+                                    <button onClick={() => setModalGender('male')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${modalGender === 'male' ? 'bg-blue-600 text-white' : 'bg-slate-700'}` }>Boy</button>
+                                    <button onClick={() => setModalGender('female')} className={`flex-1 p-3 rounded-lg font-bold text-xs transition ${modalGender === 'female' ? 'bg-pink-600 text-white' : 'bg-slate-700'}` }>Girl</button>
+                                </div>
+                            </div>
+                        </div>
+                        <button onClick={() => handleCreate(modalName, modalRole, modalGender)} className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl mt-4 hover:scale-[1.02] transition shadow-lg shadow-indigo-200">Create Profile</button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
-        const Dashboard = ({ member, events, theme, setView, db, appId }) => {
-            const today = new Date();
-            const content = getContentForDate(today, member?.contentPref || 'inspiration');
-            const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-            
-            const todaysEvents = events.filter(ev => {
-                const evDate = new Date(ev.startTime);
-                return evDate.getDate() === today.getDate() && evDate.getMonth() === today.getMonth() && evDate.getFullYear() === today.getFullYear();
-            });
-
-            const EventList = e('div', { className: `${theme.card} rounded-[2rem] border overflow-hidden shadow-sm` },
-                todaysEvents.map((ev, idx) => {
-                     const Icon = EVENT_ICONS.find(i => i.id === ev.icon)?.icon || lucide.Clock;
-                     return e('div', { key: ev.id, className: `flex items-center gap-4 p-4 ${idx !== todaysEvents.length - 1 ? 'border-b border-black/5' : ''}` },
-                        e('div', { className: "text-center w-12" },
-                            e('div', { className: "text-xs font-bold opacity-50" }, new Date(ev.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).split(' ')[1]),
-                            e('div', { className: "text-lg font-bold leading-none" }, new Date(ev.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).split(' ')[0])
-                        ),
-                        e('div', { className: `p-3 rounded-2xl ${theme.bg} text-current` }, e(Icon, { size: 20, className: theme.subtext })),
-                        e('div', { className: "flex-1 min-w-0" },
-                            e('h4', { className: "font-bold truncate" }, ev.title),
-                            e('div', { className: "flex items-center gap-2 text-xs opacity-60" },
-                                e('span', { className: "bg-black/5 px-2 py-0.5 rounded-md truncate max-w-[100px]" }, ev.memberName)
-                            )
-                        )
-                    );
-                })
-            );
-
-            return e('div', { className: "space-y-6 animate-fade-in-up" },
-                e('div', { className: `p-6 md:p-8 rounded-[2rem] ${theme.accent} text-white shadow-xl relative overflow-hidden group` },
-                    e('div', { className: "absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform duration-700" }, e(lucide.Heart, { size: 150, fill: "currentColor" })),
-                    e('div', { className: "relative z-10" },
-                        e('p', { className: "opacity-90 text-xs font-bold uppercase tracking-widest mb-1" }, dateStr),
-                        e('h2', { className: "text-2xl md:text-4xl font-bold" }, "Hi, ", member.name, "!"),
-                        e('div', { className: "bg-white/15 backdrop-blur-md p-5 rounded-2xl border border-white/20 shadow-inner" },
-                            e('div', { className: "flex justify-between items-start gap-4 mb-3" },
-                                e('span', { className: "text-[10px] uppercase tracking-wider font-bold opacity-80 flex items-center gap-1.5 bg-black/20 px-2 py-1 rounded-full" },
-                                    member.contentPref === 'bible' ? e(lucide.BookOpen, { size: 10 }) : e(lucide.Heart, { size: 10 }),
-                                    member.contentPref === 'bible' ? ' Verse' : ' Quote'
-                                ),
-                                e('button', { onClick: () => speakText(content, member.voiceSettings), className: "bg-white/20 hover:bg-white/30 p-2 rounded-full transition active:scale-95" }, e(lucide.Volume2, { size: 16 }))
-                            ),
-                            e('p', { className: `text-sm md:text-base leading-relaxed opacity-95 ${member.role === 'child' ? 'font-comic' : 'font-serif italic'}` }, "\"", content, "\"")
-                        )
-                    )
-                ),
-
-                e('div', { className: "space-y-3" },
-                    e('h3', { className: "text-lg font-bold px-2 opacity-80 flex items-center gap-2" }, e(lucide.Clock, { size: 18 }), " Today's Schedule"),
-                    todaysEvents.length === 0 ? (
-                        e('div', { className: `${theme.card} p-6 rounded-[2rem] border border-dashed border-gray-300 flex flex-col items-center justify-center text-center opacity-50` },
-                            e('div', { className: "mb-2 bg-black/5 p-3 rounded-full" }, e(lucide.Sun, { size: 24 })),
-                            e('p', { className: "text-sm font-bold" }, "Nothing scheduled for today!"),
-                            e('p', { className: "text-xs" }, "Enjoy your free time.")
-                        )
-                    ) : EventList
-                ),
-
-                e('div', { className: "grid grid-cols-2 gap-4" },
-                    e('button', { onClick: () => setView('planner'), className: `${theme.card} p-5 rounded-[2rem] border flex flex-col items-center justify-center gap-3 h-32 hover:scale-[1.02] transition-all duration-300 group` },
-                        e('div', { className: `p-3 rounded-full ${theme.bg} ${theme.text} group-hover:bg-opacity-80` }, e(lucide.CalendarIcon, { size: 24, strokeWidth: 1.5 })),
-                        e('span', { className: "font-bold text-sm opacity-80" }, "Full Calendar")
-                    ),
-                    e('button', { onClick: () => setView('notes'), className: `${theme.card} p-5 rounded-[2rem] border flex flex-col items-center justify-center gap-3 h-32 hover:scale-[1.02] transition-all duration-300 group` },
-                        e('div', { className: `p-3 rounded-full ${theme.bg} ${theme.text} group-hover:bg-opacity-80` }, e(lucide.PenTool, { size: 24, strokeWidth: 1.5 })),
-                        e('span', { className: "font-bold text-sm opacity-80" }, "My Notes")
-                    )
-                )
-            );
-        };
-
-        const FamilyCalendar = ({ member, members, events, theme, db, appId }) => {
-            const [currentDate, setCurrentDate] = useState(() => new Date());
-            const [selectedAssignee, setSelectedAssignee] = useState(member.id); 
-            const [showModal, setShowModal] = useState(false);
-            const [selectedDate, setSelectedDate] = useState(null);
-            const [newEventTitle, setNewEventTitle] = useState('');
-            const [newEventIcon, setNewEventIcon] = useState('default');
-            const [newEventTime, setNewEventTime] = useState('12:00');
-            const [isMicActive, setIsMicActive] = useState(false); 
-
-            const startDictation = () => {
-                const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
-                if (!SR) return;
+    return (
+        <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
+            <div className="w-full max-w-md">
+                <h1 className="text-3xl font-bold text-center mb-8">Who's here?</h1>
+                {addError && <div className="bg-red-500/20 p-4 rounded-xl mb-4 text-center text-sm">{addError}</div>}
                 
-                const dictation = new SR();
-                dictation.lang = 'en-US';
-                dictation.continuous = false;
-                dictation.interimResults = false;
+                <div className="grid grid-cols-2 gap-4">
+                    {members.map(m => e('button', { key: m.id, onClick: () => onSelect(m), className: "flex flex-col items-center gap-2 p-6 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/5 transition" },
+                        e('div', { className: "text-5xl mb-2" }, m.avatar),
+                        e('span', { className: "font-bold text-lg" }, m.name)
+                    ))}
+                    {!familyIsFull && e('button', { onClick: () => setAdd(true), className: "flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/40 transition" }, e(lucide.UserPlus, { size: 40 }), e('span', { className: "font-bold" }, "Add"))}
+                </div>
+                {familyIsFull && e('p', { className: "text-sm text-center text-red-300 mt-4" }, e(lucide.AlertCircle, { size: 16, className: "inline-block mr-1" }), " License limit (6 members) reached for this family.")}
 
-                dictation.onstart = () => setIsMicActive(true);
-                dictation.onend = () => setIsMicActive(false);
-                dictation.onresult = (evt) => {
-                    const text = evt.results[0][0].transcript;
-                    setNewEventTitle(text);
-                };
-                dictation.start();
-            };
+                <button onClick={signOut} className="mt-12 w-full py-4 text-white/40 hover:text-white flex justify-center gap-2" >{e(lucide.LogOut, { size: 18 })} Sign Out</button>
+            </div>
+            {add && e(AddMemberModal, { handleCreate })}
+        </div>
+    );
+};
 
-            const changeMonth = (offset) => {
-                const newDate = new Date(currentDate);
-                newDate.setMonth(newDate.getMonth() + offset);
-                setCurrentDate(newDate);
-            };
+const Dashboard = ({ member, events, theme, setView, db, appId }) => {
+    const today = new Date();
+    const content = getContentForDate(today, member?.contentPref || 'inspiration');
+    const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    
+    const todaysEvents = events.filter(ev => {
+        const evDate = new Date(ev.startTime);
+        return evDate.getDate() === today.getDate() && evDate.getMonth() === today.getMonth() && evDate.getFullYear() === today.getFullYear();
+    });
 
-            const getEventsForDay = (day) => {
-                return events.filter(ev => {
-                    const evDate = new Date(ev.startTime);
-                    return evDate.getDate() === day && evDate.getMonth() === currentDate.getMonth() && evDate.getFullYear() === currentDate.getFullYear() &&
-                        (selectedAssignee === 'all' || ev.memberId === selectedAssignee || ev.memberId === 'all');
-                });
-            };
+    const EventList = e('div', { className: `${theme.card} rounded-[2rem] border overflow-hidden shadow-sm` },
+        todaysEvents.map((ev, idx) => {
+             const Icon = EVENT_ICONS.find(i => i.id === ev.icon)?.icon || lucide.Clock;
+             return e('div', { key: ev.id, className: `flex items-center gap-4 p-4 ${idx !== todaysEvents.length - 1 ? 'border-b border-black/5' : ''}` },
+                e('div', { className: "text-center w-12" },
+                    e('div', { className: "text-xs font-bold opacity-50" }, new Date(ev.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).split(' ')[1]),
+                    e('div', { className: "text-lg font-bold leading-none" }, new Date(ev.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).split(' ')[0])
+                ),
+                e('div', { className: `p-3 rounded-2xl ${theme.bg} text-current` }, e(Icon, { size: 20, className: theme.subtext })),
+                e('div', { className: "flex-1 min-w-0" },
+                    e('h4', { className: "font-bold truncate" }, ev.title),
+                    e('div', { className: "flex items-center gap-2 text-xs opacity-60" },
+                        e('span', { className: "bg-black/5 px-2 py-0.5 rounded-md truncate max-w-[100px]" }, ev.memberName)
+                    )
+                )
+            );
+        })
+    );
 
-            const handleAddEvent = async () => {
-                if (!newEventTitle || !selectedDate) return;
-                const [hours, mins] = newEventTime.split(':');
-                const eventDateTime = new Date(selectedDate);
-                eventDateTime.setHours(parseInt(hours), parseInt(mins), 0, 0);
+    return e('div', { className: "space-y-6 animate-fade-in-up" },
+        e('div', { className: `p-6 md:p-8 rounded-[2rem] ${theme.accent} text-white shadow-xl relative overflow-hidden group` },
+            e('div', { className: "absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform duration-700" }, e(lucide.Heart, { size: 150, fill: "currentColor" })),
+            e('div', { className: "relative z-10" },
+                e('p', { className: "opacity-90 text-xs font-bold uppercase tracking-widest mb-1" }, dateStr),
+                e('h2', { className: "text-2xl md:text-4xl font-bold" }, "Hi, ", member.name, "!"),
+                e('div', { className: "bg-white/15 backdrop-blur-md p-5 rounded-2xl border border-white/20 shadow-inner" },
+                    e('div', { className: "flex justify-between items-start gap-4 mb-3" },
+                        e('span', { className: "text-[10px] uppercase tracking-wider font-bold opacity-80 flex items-center gap-1.5 bg-black/20 px-2 py-1 rounded-full" },
+                            member.contentPref === 'bible' ? e(lucide.BookOpen, { size: 10 }) : e(lucide.Heart, { size: 10 }),
+                            member.contentPref === 'bible' ? ' Verse' : ' Quote'
+                        ),
+                        e('button', { onClick: () => speakText(content, member.voiceSettings), className: "bg-white/20 hover:bg-white/30 p-2 rounded-full transition active:scale-95" }, e(lucide.Volume2, { size: 16 }))
+                    ),
+                    e('p', { className: `text-sm md:text-base leading-relaxed opacity-95 ${member.role === 'child' ? 'font-comic' : 'font-serif italic'}` }, "\"", content, "\"")
+                )
+            )
+        ),
+        e('div', { className: "space-y-3" },
+            e('h3', { className: "text-lg font-bold px-2 opacity-80 flex items-center gap-2" }, e(lucide.Clock, { size: 18 }), " Today's Schedule"),
+            todaysEvents.length === 0 ? (
+                e('div', { className: `${theme.card} p-6 rounded-[2rem] border border-dashed border-gray-300 flex flex-col items-center justify-center text-center opacity-50` },
+                    e('div', { className: "mb-2 bg-black/5 p-3 rounded-full" }, e(lucide.Sun, { size: 24 })),
+                    e('p', { className: "text-sm font-bold" }, "Nothing scheduled for today!"),
+                    e('p', { className: "text-xs" }, "Enjoy your free time.")
+                )
+            ) : EventList
+        ),
+        e('div', { className: "grid grid-cols-2 gap-4" },
+            e('button', { onClick: () => setView('planner'), className: `${theme.card} p-5 rounded-[2rem] border flex flex-col items-center justify-center gap-3 h-32 hover:scale-[1.02] transition-all duration-300 group` },
+                e('div', { className: `p-3 rounded-full ${theme.bg} ${theme.text} group-hover:bg-opacity-80` }, e(lucide.CalendarIcon, { size: 24, strokeWidth: 1.5 })),
+                e('span', { className: "font-bold text-sm opacity-80" }, "Full Calendar")
+            ),
+            e('button', { onClick: () => setView('notes'), className: `${theme.card} p-5 rounded-[2rem] border flex flex-col items-center justify-center gap-3 h-32 hover:scale-[1.02] transition-all duration-300 group` },
+                e('div', { className: `p-3 rounded-full ${theme.bg} ${theme.text} group-hover:bg-opacity-80` }, e(lucide.PenTool, { size: 24, strokeWidth: 1.5 })),
+                e('span', { className: "font-bold text-sm opacity-80" }, "My Notes")
+            )
+        )
+    );
+};
+
+const FamilyCalendar = ({ member, members, events, theme, db, appId }) => {
+    const [currentDate, setCurrentDate] = useState(() => new Date());
+    const [selectedAssignee, setSelectedAssignee] = useState(member.id); 
+    const [showModal, setShowModal] = useState(false);
+    const [selectedDate, setSelectedDate] = useState(null);
+    const [newEventTitle, setNewEventTitle] = useState('');
+    const [newEventIcon, setNewEventIcon] = useState('default');
+    const [newEventTime, setNewEventTime] = useState('12:00');
+    const [isMicActive, setIsMicActive] = useState(false); 
+
+    const startDictation = () => {
+        const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
+        if (!SR) return;
+        
+        const dictation = new SR();
+        dictation.lang = 'en-US';
+        dictation.continuous = false;
+        dictation.interimResults = false;
+
+        dictation.onstart = () => setIsMicActive(true);
+        dictation.onend = () => setIsMicActive(false);
+        dictation.onresult = (evt) => {
+            const text = evt.results[0][0].transcript;
+            setNewEventTitle(text);
+        };
+        dictation.start();
+    };
+
+    const changeMonth = (offset) => {
+        const newDate = new Date(currentDate);
+        newDate.setMonth(newDate.getMonth() + offset);
+        setCurrentDate(newDate);
+    };
+
+    const getEventsForDay = (day) => {
+        return events.filter(ev => {
+            const evDate = new Date(ev.startTime);
+            return evDate.getDate() === day && evDate.getMonth() === currentDate.getMonth() && evDate.getFullYear() === currentDate.getFullYear() &&
+                (selectedAssignee === 'all' || ev.memberId === selectedAssignee || ev.memberId === 'all');
+        });
+    };
+
+    const handleAddEvent = async () => {
+        if (!newEventTitle || !selectedDate) return;
+        const [hours, mins] = newEventTime.split(':');
+        const eventDateTime = new Date(selectedDate);
+        eventDateTime.setHours(parseInt(hours), parseInt(mins), 0, 0);
 
                 const assignedMember = members.find(m => m.id === selectedAssignee);
                 const memberName = selectedAssignee === 'all' ? 'Everyone' : (assignedMember ? assignedMember.name : 'Unknown');
@@ -822,7 +844,7 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
                     e('input', { className: `text-2xl font-bold bg-transparent outline-none w-full mb-4 ${theme.text}`, placeholder: "Title...", value: title, onChange: evt => setTitle(evt.target.value) }),
                     e('textarea', { className: `w-full flex-1 bg-transparent outline-none resize-none ${theme.text} opacity-80`, placeholder: "Type or speak...", value: content, onChange: evt => setContent(evt.target.value) }),
                     e('button', { onClick: toggleMic, className: `absolute bottom-6 right-6 p-4 rounded-full shadow-xl transition hover:scale-110 active:scale-90 ${isListening ? 'bg-red-500 animate-pulse text-white' : `${theme.accent} text-white`}` },
-                        isListening ? e(lucide.MicOff, null) : e(lucide.Mic, null)
+                        e(lucide.Mic, { size: 16 })
                     )
                 )
             );
@@ -835,7 +857,7 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
                     e('button', { onClick: () => setIsEditor(true), className: `${theme.accent} text-white p-3 rounded-xl shadow-md hover:brightness-110 transition active:scale-95` }, e(lucide.PenTool, { size: 20 }))
                 ),
                 e('div', { className: "grid gap-3" },
-                    notes.map(n => e('div', { key: n.id, className: `${theme.card} p-5 rounded-2xl border shadow-sm relative group` },
+                    notes.map(n => e('div', { key: n.id, className: `${theme.card} p-5 rounded-[2rem] border shadow-sm relative group` },
                         e('h3', { className: "font-bold mb-1" }, n.title),
                         e('p', { className: "text-sm opacity-70 line-clamp-3" }, n.content),
                         e('button', { 
@@ -847,8 +869,7 @@ const ProfileSelector = ({ members, onSelect, onCreate, signOut }) => {
                 )
             );
         };
-        
-        // --- SETTINGS SCREEN ---
+
         const SettingsScreen = ({ member, members, familyId, auth, theme, onUpdate, onCreate }) => {
             const [showAddModal, setShowAddModal] = useState(false);
             const [newName, setNewName] = useState('');
