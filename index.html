@@ -20,9 +20,9 @@
     <!-- React and Babel for JSX transpilation -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.23.6/babel.min.js"></script>
 
-    <!-- DIRECT FIREBASE SDK LOADS (Modules replaced with v10 standard) -->
+    <!-- FIREBASE SDK LOADS (Using v10 modules for robust access) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -79,8 +79,7 @@
                     root.render(React.createElement(App, null));
                     lucide.createIcons(); 
                 } else {
-                     // The error is likely here if the app is still white
-                     console.error("APP CRASHED: App component not found or Babel failed to compile JSX.");
+                     console.error("App component not found. Check console for Babel/JSX errors.");
                 }
             }, 500); 
         });
