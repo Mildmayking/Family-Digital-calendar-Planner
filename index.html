@@ -44,6 +44,7 @@
         // ACCESS GLOBAL OBJECTS AFTER SDK SCRIPTS HAVE RUN
         const { useState, useEffect, useRef } = React;
         const lucide = window.lucide; 
+        const e = React.createElement; // FIX: Define the 'e' shorthand for React.createElement
 
         // --- FIREBASE CONFIGURATION (Managed Service Model) ---
         // KEYS ARE HARDCODED HERE FOR RELIABILITY
@@ -292,7 +293,7 @@
 
           const handleAuth = async (e, email, password, isLogin) => { 
               e.preventDefault(); 
-              if (!firebaseRefs) return;
+              if (!refs.auth) return;
               try { 
                   if (isLogin) {
                       await refs.auth.signInWithEmailAndPassword(email, password); 
@@ -310,7 +311,7 @@
           
           // --- License Verification Function ---
           const verifyLicense = async (licenseKey) => {
-              if (!firebaseRefs || !user || licenseKey.length !== 12) {
+              if (!refs.db || !user || licenseKey.length !== 12) {
                   throw new Error("Invalid key format.");
               }
               const licenseRef = refs.db.collection(COLLECTIONS.LICENSES).doc(licenseKey);
@@ -354,7 +355,7 @@
           };
 
           const handleFamilySetup = async (mode, code) => {
-              if (!firebaseRefs || !user) return;
+              if (!refs.db || !user) return;
 
               const fid = mode === 'create' ? generateFamilyCode() : code.toUpperCase().trim();
               
@@ -417,49 +418,59 @@
 
           const toggleMusic = () => { if (audioRef.current) { isPlayingMusic?audioRef.current.pause():audioRef.current.play(); setIsPlayingMusic(!isPlayingMusic); }};
 
-          if (loading || !refs.auth || !refs.db) return <div className="h-screen flex items-center justify-center"><lucide.Loader className="animate-spin text-blue-500"/></div>;
+          if (loading || !refs.auth || !refs.db) return e('div', { className: "h-screen flex items-center justify-center" }, e(lucide.Loader, { className: "animate-spin text-blue-500" }));
           
-          if (!user || view === 'auth') return <AuthScreen onAuth={handleAuth} onGuestLogin={handleGuestLogin} />;
+          if (!user || view === 'auth') return e(AuthScreen, { onAuth: handleAuth, onGuestLogin: handleGuestLogin });
           
-          if (view === 'license_gate') return <LicenseGate verifyLicense={verifyLicense} signOut={()=>refs.auth.signOut()} />;
+          if (view === 'license_gate') return e(LicenseGate, { verifyLicense: verifyLicense, signOut: () => refs.auth.signOut(), auth: refs.auth });
 
-          if (view === 'setup_family') return <FamilySetupScreen onSetup={handleFamilySetup} signOut={()=>refs.auth.signOut()} />;
+          if (view === 'setup_family') return e(FamilySetupScreen, { onSetup: handleFamilySetup, signOut: () => refs.auth.signOut() });
 
-          if (view === 'profiles') return <ProfileSelector members={members} onSelect={m=>{setCurrentMember(m); setView('home');}} onCreate={createMember} signOut={()=>refs.auth.signOut()}/>;
+          if (view === 'profiles') return e(ProfileSelector, { members: members, onSelect: m => { setCurrentMember(m); setView('home'); }, onCreate: createMember, signOut: () => refs.auth.signOut() });
 
           const theme = THEMES[currentMember?.theme || 'ocean'];
 
-          return (
-            <div className={`min-h-screen transition-colors duration-500 ${theme.bg} ${theme.text}`} style={{fontFamily: currentMember?.role==='child'?'"Comic Neue",cursive':'"Inter",sans-serif'}}>
-              <audio ref={audioRef} loop src="https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112762.mp3" />
-              <header className={`px-4 py-3 sticky top-0 z-30 flex justify-between items-center backdrop-blur-xl bg-opacity-90 border-b border-black/5 ${theme.bg}`}>
-                <div className="flex items-center gap-3" onClick={() => setView('profiles')}>
-                    <div className={`h-10 w-10 rounded-full flex items-center justify-center text-xl shadow-md border-2 border-white/40 ${theme.accent} text-white`}>{currentMember.avatar}</div>
-                    <div><h1 className="text-base font-bold leading-tight">{currentMember.name}</h1></div>
-                </div>
-                <button onClick={toggleMusic} className={`p-2 rounded-full ${theme.card} border border-black/5`}>{isPlayingMusic ? <lucide.Volume2 size={20} className={theme.accent.replace('bg-', 'text-')} /> : <lucide.VolumeX size={20} className="opacity-40" />}</button>
-              </header>
-              <main className="p-4 pb-32 max-w-xl mx-auto w-full min-h-[85vh]">
-                {view === 'home' && <Dashboard member={currentMember} events={events} theme={theme} setView={setView} />}
-                {view === 'notes' && <NotesManager member={currentMember} familyId={familyId} db={db} appId={appId} theme={theme} />}
-                {view === 'planner' && <FamilyCalendar member={currentMember} members={members} events={events} familyId={familyId} db={db} appId={appId} theme={theme} />}
-                {view === 'settings' && <SettingsScreen member={currentMember} members={members} familyId={familyId} db={db} appId={appId} theme={theme} onUpdate={setCurrentMember} onCreate={createMember} />}
-              </main>
-              <nav className="fixed bottom-0 left-0 right-0 z-40 p-4">
-                <div className={`max-w-xl mx-auto ${theme.card} border rounded-2xl p-2 flex justify-between shadow-2xl backdrop-blur-xl`}>
-                    {[{id:'home',icon:lucide.Home},{id:'notes',icon:lucide.PenTool},{id:'planner',icon:lucide.CalendarIcon},{id:'settings',icon:lucide.Settings}].map(i=>(
-                        <button key={i.id} onClick={()=>setView(i.id)} className={`flex-1 flex flex-col items-center py-3 rounded-xl transition-all ${view===i.id?'':'opacity-60'}`}>
-                            <div className={`p-1.5 rounded-lg ${view===i.id?`${theme.accent} text-white shadow-lg -translate-y-1`:'text-current'}`}><i.icon size={24} strokeWidth={view===i.id?2.5:2}/></div>
-                        </button>
-                    ))}
-                </div>
-              </nav>
-            </div>
+          const Header = e('header', { className: `px-4 py-3 sticky top-0 z-30 flex justify-between items-center backdrop-blur-xl bg-opacity-90 border-b border-black/5 ${theme.bg}` },
+            e('div', { className: "flex items-center gap-3", onClick: () => setView('profiles') },
+                e('div', { className: `h-10 w-10 rounded-full flex items-center justify-center text-xl shadow-md border-2 border-white/40 ${theme.accent} text-white` }, currentMember.avatar),
+                e('div', null, e('h1', { className: "text-base font-bold leading-tight" }, currentMember.name))
+            ),
+            e('button', { onClick: toggleMusic, className: `p-2 rounded-full ${theme.card} border border-black/5` }, 
+                isPlayingMusic ? e(lucide.Volume2, { size: 20, className: theme.accent.replace('bg-', 'text-') }) : e(lucide.VolumeX, { size: 20, className: "opacity-40" })
+            )
+          );
+
+          const MainContent = e('main', { className: "p-4 pb-32 max-w-xl mx-auto w-full min-h-[85vh]" },
+            view === 'home' && e(Dashboard, { member: currentMember, events: events, theme: theme, setView: setView, db: refs.db, appId: appId }),
+            view === 'notes' && e(NotesManager, { member: currentMember, familyId: familyId, db: refs.db, appId: appId, theme: theme }),
+            view === 'planner' && e(FamilyCalendar, { member: currentMember, members: members, events: events, familyId: familyId, db: refs.db, appId: appId, theme: theme }),
+            view === 'settings' && e(SettingsScreen, { member: currentMember, members: members, familyId: familyId, auth: refs.auth, theme: theme, onUpdate: setCurrentMember })
+          );
+
+          const Navbar = e('nav', { className: "fixed bottom-0 left-0 right-0 z-40 p-4" },
+            e('div', { className: `max-w-xl mx-auto ${theme.card} border rounded-2xl p-2 flex justify-between shadow-2xl backdrop-blur-xl` },
+                [{id:'home',icon:lucide.Home}, {id:'notes',icon:lucide.PenTool}, {id:'planner',icon:lucide.CalendarIcon}, {id:'settings',icon:lucide.Settings}].map(i => e('button', { 
+                    key: i.id, 
+                    onClick: () => setView(i.id), 
+                    className: `flex-1 flex flex-col items-center py-3 rounded-xl transition-all ${view === i.id ? '' : 'opacity-60'}` 
+                },
+                    e('div', { className: `p-1.5 rounded-lg ${view === i.id ? `${theme.accent} text-white shadow-lg -translate-y-1` : 'text-current'}` }, 
+                        e(i.icon, { size: 24, strokeWidth: view === i.id ? 2.5 : 2 })
+                    )
+                ))
+            )
+          );
+
+          return e('div', { className: `min-h-screen transition-colors duration-500 ${theme.bg} ${theme.text}`, style: { fontFamily: currentMember?.role === 'child' ? '"Comic Neue",cursive' : '"Inter",sans-serif' } },
+            e('audio', { ref: audioRef, loop: true, src: "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112762.mp3" }),
+            Header,
+            MainContent,
+            Navbar
           );
         }
         
         // Render the main App component
-        ReactDOM.render(<App />, document.getElementById('root'));
+        ReactDOM.render(e(App, null), document.getElementById('root'));
 
     </script>
 </body>
