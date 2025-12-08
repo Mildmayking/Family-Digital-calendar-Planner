@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Hub Calendar - SaaS Ready</title>
+    
+    <!-- Branding/Styling/Meta Tags -->
+    <link rel="icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/family-hub-logo-180x180.png.png">
+    <meta name="apple-mobile-web-app-title" content="Family Hub">
+    <meta name="application-name" content="Family Hub">
+    <meta name="theme-color" content="#4f46e5">
+
+    <!-- Tailwind CSS (loaded from CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons (Loaded first) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- React and Babel for JSX transpilation -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.23.6/babel.min.js"></script>
+
+    <!-- FIREBASE SDK LOADS (Using v10 modules for robust access) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, where, onSnapshot, deleteDoc, doc, setDoc, updateDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        
+        // Expose Firebase services globally under the 'F_' prefix for the separate script to access
+        window.F_initializeApp = initializeApp;
+        window.F_getAuth = getAuth;
+        window.F_signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.F_createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+        window.F_signOut = signOut;
+        window.F_onAuthStateChanged = onAuthStateChanged;
+        window.F_signInAnonymously = signInAnonymously;
+        window.F_signInWithCustomToken = signInWithCustomToken;
+        window.F_getFirestore = getFirestore;
+        window.F_collection = collection;
+        window.F_addDoc = addDoc;
+        window.F_query = query;
+        window.F_where = where;
+        window.F_onSnapshot = onSnapshot;
+        window.F_deleteDoc = deleteDoc;
+        window.F_doc = doc;
+        window.F_setDoc = setDoc;
+        window.F_updateDoc = updateDoc;
+        window.F_getDoc = getDoc;
+        window.F_getDocs = getDocs;
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Comic+Neue:wght@300;400;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .font-comic { font-family: 'Comic Neue', cursive; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in-up { animation: fadeIn 0.5s ease-out; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- 4. APPLICATION RENDERER -->
+    <!-- CRITICAL: Links to the external logic file -->
+    <script type="text/babel" src="src/FamilyPlanner.js"></script>
+    
+    <script>
+        // Final render check (runs after all scripts loaded)
+        document.addEventListener('DOMContentLoaded', () => {
+             // We wait for the main app script to load and be parsed by Babel
+            setTimeout(() => { 
+                // Check if the App component is defined and render it
+                if (typeof App !== 'undefined') {
+                    const root = ReactDOM.createRoot(document.getElementById('root'));
+                    root.render(React.createElement(App, null));
+                    lucide.createIcons(); 
+                } else {
+                     console.error("App component not found. Check console for Babel/JSX errors.");
+                }
+            }, 500); 
+        });
+    </script>
+</body>
+</html>
